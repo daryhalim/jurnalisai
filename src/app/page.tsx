@@ -1,66 +1,941 @@
-import Image from "next/image";
+"use client";
+
+import React, { useState, useEffect, useRef } from "react";
+import { 
+  Sparkles, 
+  FileText, 
+  FileCheck, 
+  Trash2, 
+  Wand2, 
+  ShieldAlert, 
+  ShieldCheck, 
+  Sliders, 
+  RefreshCw, 
+  Download, 
+  Info, 
+  CheckCircle2, 
+  X,
+  AlertCircle
+} from "lucide-react";
 import styles from "./page.module.css";
 
+interface HighlightItem {
+  text: string;
+  reason: string;
+}
+
+interface AICheckResponse {
+  score: number;
+  explanation: string;
+  highlights: HighlightItem[];
+}
+
+interface JournalData {
+  judul: string;
+  abstrak: string;
+  pendahuluan: string;
+  metode: string;
+  hasil: string;
+  kesimpulan: string;
+  referensi: string;
+}
+
+const initialJournalData: JournalData = {
+  judul: "",
+  abstrak: "",
+  pendahuluan: "",
+  metode: "",
+  hasil: "",
+  kesimpulan: "",
+  referensi: ""
+};
+
+type TabType = keyof JournalData;
+
 export default function Home() {
+  // File Upload State
+  const [templateFile, setTemplateFile] = useState<File | null>(null);
+  const [reportFile, setReportFile] = useState<File | null>(null);
+  
+  // Refs for file inputs
+  const templateInputRef = useRef<HTMLInputElement>(null);
+  const reportInputRef = useRef<HTMLInputElement>(null);
+
+  // App API & Status State
+  const [apiKey, setApiKey] = useState<string>("");
+  const [showApiPanel, setShowApiPanel] = useState<boolean>(false);
+  const [status, setStatus] = useState<"idle" | "uploading" | "processing" | "checking" | "done" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState<string>("");
+  const [currentStep, setCurrentStep] = useState<number>(0);
+  const [translate, setTranslate] = useState<boolean>(false);
+
+  // Journal Workspace State
+  const [journalData, setJournalData] = useState<JournalData>(initialJournalData);
+  const [activeTab, setActiveTab] = useState<TabType>("judul");
+  
+  // Turnitin AI Checker State
+  const [aiScores, setAiScores] = useState<Record<TabType, number>>({
+    judul: 0,
+    abstrak: 0,
+    pendahuluan: 0,
+    metode: 0,
+    hasil: 0,
+    kesimpulan: 0,
+    referensi: 0
+  });
+  const [aiHighlights, setAiHighlights] = useState<Record<TabType, HighlightItem[]>>({
+    judul: [],
+    abstrak: [],
+    pendahuluan: [],
+    metode: [],
+    hasil: [],
+    kesimpulan: [],
+    referensi: []
+  });
+  const [aiExplanations, setAiExplanations] = useState<Record<TabType, string>>({
+    judul: "",
+    abstrak: "",
+    pendahuluan: "",
+    metode: "",
+    hasil: "",
+    kesimpulan: "",
+    referensi: ""
+  });
+
+  // Paraphrase Popover State
+  const [popoverVisible, setPopoverVisible] = useState<boolean>(false);
+  const [popoverPos, setPopoverPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [popoverOriginalText, setPopoverOriginalText] = useState<string>("");
+  const [popoverSuggestedText, setPopoverSuggestedText] = useState<string>("");
+  const [popoverLoading, setPopoverLoading] = useState<boolean>(false);
+  const [activeHighlightIndex, setActiveHighlightIndex] = useState<number>(-1);
+
+  // Success Modal
+  const [successModalVisible, setSuccessModalVisible] = useState<boolean>(false);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+
+  // Load API Key from localstorage on mount
+  useEffect(() => {
+    const savedKey = localStorage.getItem("gemini_api_key");
+    if (savedKey) {
+      setApiKey(savedKey);
+    }
+  }, []);
+
+  const saveApiKey = (key: string) => {
+    setApiKey(key);
+    if (key.trim()) {
+      localStorage.setItem("gemini_api_key", key);
+    } else {
+      localStorage.removeItem("gemini_api_key");
+    }
+    setShowApiPanel(false);
+  };
+
+  // Handle drag and drop visuals
+  const [dragOverTemplate, setDragOverTemplate] = useState(false);
+  const [dragOverReport, setDragOverReport] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent, type: "template" | "report") => {
+    e.preventDefault();
+    if (type === "template") setDragOverTemplate(true);
+    else setDragOverReport(true);
+  };
+
+  const handleDragLeave = (type: "template" | "report") => {
+    if (type === "template") setDragOverTemplate(false);
+    else setDragOverReport(false);
+  };
+
+  const handleDrop = (e: React.DragEvent, type: "template" | "report") => {
+    e.preventDefault();
+    handleDragLeave(type);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      if (type === "template" && file.name.endsWith(".docx")) {
+        setTemplateFile(file);
+      } else if (type === "report" && (file.name.endsWith(".docx") || file.name.endsWith(".pdf"))) {
+        setReportFile(file);
+      }
+    }
+  };
+
+  // Main Generator Logic
+  const startGenerating = async () => {
+    if (!reportFile || !templateFile) return;
+
+    setStatus("processing");
+    setCurrentStep(0);
+    setErrorMsg("");
+
+    try {
+      // Step 1: Reading template
+      setCurrentStep(1);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Step 2: Processing report (sending to backend)
+      setCurrentStep(2);
+      
+      const formData = new FormData();
+      formData.append("report", reportFile);
+      formData.append("translate", String(translate));
+
+      const processRes = await fetch("/api/process", {
+        method: "POST",
+        body: formData
+      });
+
+      if (!processRes.ok) {
+        const errorData = await processRes.json();
+        throw new Error(errorData.error || "Gagal memproses naskah laporan.");
+      }
+
+      const journalResult: JournalData = await processRes.json();
+      setJournalData(journalResult);
+
+      // Step 3: Generating sections & Writing drafts
+      setCurrentStep(3);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Step 4: Turnitin AI detection check
+      setCurrentStep(4);
+      
+      // Perform initial AI check on Abstrak and Pendahuluan to populate scores
+      const tabsToCheck: TabType[] = ["abstrak", "pendahuluan"];
+      const updatedScores = { ...aiScores };
+      const updatedHighlights = { ...aiHighlights };
+      const updatedExplanations = { ...aiExplanations };
+
+      for (const tab of tabsToCheck) {
+        if (journalResult[tab] && journalResult[tab].trim()) {
+          try {
+            const checkRes = await fetch("/api/check-ai", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text: journalResult[tab] })
+            });
+            if (checkRes.ok) {
+              const resData: AICheckResponse = await checkRes.json();
+              updatedScores[tab] = resData.score;
+              updatedHighlights[tab] = resData.highlights || [];
+              updatedExplanations[tab] = resData.explanation || "";
+            }
+          } catch (e) {
+            console.error(`AI checking failed for tab: ${tab}`, e);
+          }
+        }
+      }
+
+      setAiScores(updatedScores);
+      setAiHighlights(updatedHighlights);
+      setAiExplanations(updatedExplanations);
+
+      setStatus("done");
+      setActiveTab("judul");
+    } catch (err: any) {
+      console.error(err);
+      setStatus("error");
+      setErrorMsg(err.message || "Terjadi kesalahan sistem saat memproses.");
+    }
+  };
+
+  // Perform AI analysis on the currently active tab
+  const checkCurrentTabAI = async (textToCheck = journalData[activeTab]) => {
+    if (!textToCheck || !textToCheck.trim() || activeTab === "judul" || activeTab === "referensi") return;
+    
+    setStatus("checking");
+    try {
+      const res = await fetch("/api/check-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: textToCheck })
+      });
+
+      if (res.ok) {
+        const resData: AICheckResponse = await res.json();
+        setAiScores(prev => ({ ...prev, [activeTab]: resData.score }));
+        setAiHighlights(prev => ({ ...prev, [activeTab]: resData.highlights || [] }));
+        setAiExplanations(prev => ({ ...prev, [activeTab]: resData.explanation || "" }));
+      }
+    } catch (err) {
+      console.error("AI check failed:", err);
+    } finally {
+      setStatus("done");
+    }
+  };
+
+  // Paraphrase specific sentence triggered from highlights popup
+  const handlePopoverParaphraseRequest = async (sentence: string) => {
+    setPopoverLoading(true);
+    try {
+      const res = await fetch("/api/paraphrase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: sentence })
+      });
+      if (res.ok) {
+        const resData = await res.json();
+        setPopoverSuggestedText(resData.paraphrasedText);
+      }
+    } catch (e) {
+      console.error(e);
+      setPopoverSuggestedText("Gagal memproses parafrase otomatis.");
+    } finally {
+      setPopoverLoading(false);
+    }
+  };
+
+  const openHighlightPopover = (e: React.MouseEvent, text: string, index: number) => {
+    e.preventDefault();
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    
+    // Position popover
+    setPopoverPos({
+      x: rect.left + window.scrollX - 50,
+      y: rect.bottom + window.scrollY + 8
+    });
+    
+    setPopoverOriginalText(text);
+    setPopoverSuggestedText("");
+    setActiveHighlightIndex(index);
+    setPopoverVisible(true);
+    
+    // Immediately ask Gemini for a paraphrase suggestion
+    handlePopoverParaphraseRequest(text);
+  };
+
+  const applyPopoverParaphrase = () => {
+    if (!popoverSuggestedText || activeHighlightIndex === -1) return;
+
+    const originalText = popoverOriginalText;
+    const replacementText = popoverSuggestedText;
+
+    // 1. Update text draft
+    const oldText = journalData[activeTab];
+    const newText = oldText.replace(originalText, replacementText);
+    
+    setJournalData(prev => ({ ...prev, [activeTab]: newText }));
+
+    // 2. Remove highlight item from list
+    const currentHighlights = [...(aiHighlights[activeTab] || [])];
+    currentHighlights.splice(activeHighlightIndex, 1);
+    setAiHighlights(prev => ({ ...prev, [activeTab]: currentHighlights }));
+
+    setPopoverVisible(false);
+
+    // 3. Recheck AI score for this tab after modification
+    checkCurrentTabAI(newText);
+  };
+
+  // Full Tab automated paraphrase
+  const paraphraseFullTab = async () => {
+    const textToParaphrase = journalData[activeTab];
+    if (!textToParaphrase.trim() || activeTab === "judul" || activeTab === "referensi") return;
+
+    setStatus("checking");
+    try {
+      const res = await fetch("/api/paraphrase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: textToParaphrase })
+      });
+
+      if (res.ok) {
+        const resData = await res.json();
+        const newText = resData.paraphrasedText;
+        setJournalData(prev => ({ ...prev, [activeTab]: newText }));
+        
+        // Remove highlights since we paraphrased everything
+        setAiHighlights(prev => ({ ...prev, [activeTab]: [] }));
+        
+        // Check AI scores for the new text
+        await checkCurrentTabAI(newText);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setStatus("done");
+    }
+  };
+
+  // Export filled document to DOCX — generates a new file with all journal data
+  const handleExportDocx = async () => {
+    setIsExporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("data", JSON.stringify(journalData));
+
+      const res = await fetch("/api/export", {
+        method: "POST",
+        body: formData
+      });
+
+      if (!res.ok) {
+        throw new Error("Gagal mengunduh dokumen hasil penggabungan template.");
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `naskah_jurnal_${activeTab === "judul" ? "terformat" : activeTab}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      setSuccessModalVisible(true);
+    } catch (e: any) {
+      console.error(e);
+      alert(`Ekspor gagal: ${e.message || e}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Rendering Preview Pane with interactive highlights
+  const renderPreviewWithHighlights = () => {
+    const text = journalData[activeTab];
+    const highlights = aiHighlights[activeTab] || [];
+
+    if (!text) return <p style={{ color: "var(--text-muted)", fontStyle: "italic" }}>Kosong.</p>;
+    if (activeTab === "judul") return <h2 style={{ fontSize: "1.5rem", fontWeight: "bold", textAlign: "center" }}>{text}</h2>;
+    if (activeTab === "referensi") {
+      return (
+        <div style={{ whiteSpace: "pre-line" }}>
+          {text}
+        </div>
+      );
+    }
+
+    if (highlights.length === 0) {
+      return <p style={{ whiteSpace: "pre-wrap" }}>{text}</p>;
+    }
+
+    // Sort highlights by length descending to avoid partial matches inside other matches
+    const sortedHighlights = [...highlights].sort((a, b) => b.text.length - a.text.length);
+
+    // Build interactive element hierarchy
+    let previewContent: React.ReactNode[] = [text];
+
+    sortedHighlights.forEach((hl, hlIdx) => {
+      const nextContent: React.ReactNode[] = [];
+
+      previewContent.forEach((node) => {
+        if (typeof node === "string") {
+          const parts = node.split(hl.text);
+          if (parts.length > 1) {
+            parts.forEach((part, partIdx) => {
+              nextContent.push(part);
+              if (partIdx < parts.length - 1) {
+                nextContent.push(
+                  <span 
+                    key={`hl-${hlIdx}-${partIdx}`} 
+                    className={styles.highlightAi}
+                    onClick={(e) => openHighlightPopover(e, hl.text, hlIdx)}
+                    title={hl.reason}
+                  >
+                    {hl.text}
+                  </span>
+                );
+              }
+            });
+          } else {
+            nextContent.push(node);
+          }
+        } else {
+          nextContent.push(node);
+        }
+      });
+
+      previewContent = nextContent;
+    });
+
+    return <p style={{ whiteSpace: "pre-wrap" }}>{previewContent}</p>;
+  };
+
+  // Helper values for score dials
+  const activeScore = aiScores[activeTab] || 0;
+  const activeEx = aiExplanations[activeTab] || "";
+  const dialOffset = 377 - (377 * activeScore) / 100;
+
+  let dialColor = "var(--success)";
+  let statusText = "Aman / Manusia";
+  if (activeScore > 65) {
+    dialColor = "var(--danger)";
+    statusText = "Sangat Tinggi";
+  } else if (activeScore > 30) {
+    dialColor = "var(--warning)";
+    statusText = "Indikasi Sedang";
+  }
+
+  // Trigger file inputs
+  const clickInput = (ref: React.RefObject<HTMLInputElement | null>) => {
+    if (ref.current) ref.current.click();
+  };
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className={styles.container}>
+      {/* Header */}
+      <header className={styles.header}>
+        <div className={styles.logoArea}>
+          <div className={styles.logoIcon}>
+            <Sparkles size={20} />
+          </div>
+          <h1 className={styles.logoTitle}>Jurnalis.AI</h1>
+        </div>
+        <div 
+          className={`${styles.apiBadge} ${!apiKey ? styles.apiBadgeSetup : ""}`}
+          onClick={() => setShowApiPanel(!showApiPanel)}
+        >
+          <div 
+            className="pulse-green" 
+            style={{ 
+              background: apiKey ? "var(--success)" : "var(--warning)",
+              boxShadow: apiKey ? "0 0 8px var(--success)" : "0 0 8px var(--warning)"
+            }} 
+          />
+          <span>{apiKey ? "Gemini API Terhubung" : "Setup Gemini API Key"}</span>
+        </div>
+      </header>
+
+      {/* API Key Panel */}
+      {showApiPanel && (
+        <div className={styles.apiInputPanel}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>Gemini API Key Konfigurasi</span>
+            <X size={16} style={{ cursor: "pointer", color: "var(--text-muted)" }} onClick={() => setShowApiPanel(false)} />
+          </div>
+          <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: "0.25rem" }}>
+            Meskipun API key server sudah disiapkan, Anda bisa menggunakan kunci personal Anda di browser.
           </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+          <div className={styles.apiInputGroup}>
+            <input 
+              type="password" 
+              className={styles.apiInput} 
+              placeholder={apiKey ? "••••••••••••••••••••••••" : "Masukkan API Key Anda (AIzaSy...)"}
+              id="apiKeyField"
             />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <button 
+              className={styles.apiSaveBtn}
+              onClick={() => {
+                const val = (document.getElementById("apiKeyField") as HTMLInputElement).value;
+                saveApiKey(val);
+              }}
+            >
+              Simpan
+            </button>
+          </div>
         </div>
-      </main>
+      )}
+
+      {/* Tutorial Banner */}
+      <div className={styles.tutorialBanner}>
+        <Info size={20} />
+        <div className={styles.tutorialText}>
+          <strong>Cara Kerja:</strong> Unggah template jurnal target sebagai <strong>referensi format</strong> dan laporan penelitian Anda. AI akan mengekstrak &amp; menyusun naskah jurnal lengkap. Setelah diedit &amp; lolos Turnitin Checker, klik <strong>Ekspor &amp; Download</strong> untuk mengunduh file <code>.docx</code> jurnal yang sudah jadi.
+        </div>
+      </div>
+
+      {/* Phase 1: Upload Files Zone */}
+      {status === "idle" || status === "error" ? (
+        <div className={styles.workspace}>
+          <div className="glass-card" style={{ padding: "2rem" }}>
+            <h2 style={{ fontFamily: "var(--font-title)", fontWeight: 700, marginBottom: "0.5rem" }}>Unggah Dokumen</h2>
+            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", marginBottom: "2rem" }}>
+              Siapkan file laporan penelitian dan template jurnal Anda untuk dianalisis oleh AI.
+            </p>
+
+            <div className={styles.uploadSection}>
+              {/* Dropzone 1: Template */}
+              <div 
+                className={`${styles.uploadCard} ${templateFile ? styles.uploadCardActive : ""}`}
+                onDragOver={(e) => handleDragOver(e, "template")}
+                onDragLeave={() => handleDragLeave("template")}
+                onDrop={(e) => handleDrop(e, "template")}
+                onClick={() => clickInput(templateInputRef)}
+                style={{ borderColor: dragOverTemplate ? "var(--primary)" : "" }}
+              >
+                <input 
+                  type="file" 
+                  ref={templateInputRef} 
+                  accept=".docx" 
+                  style={{ display: "none" }} 
+                  onChange={(e) => e.target.files && setTemplateFile(e.target.files[0])}
+                />
+                <div className={styles.uploadIconWrapper}>
+                  <FileCheck size={28} />
+                </div>
+                <div className={styles.uploadTitle}>1. Template Jurnal Target</div>
+                <div className={styles.uploadDesc}>Tarik file template Word (.docx) yang sudah berisi tag placeholder ke sini.</div>
+                
+                {templateFile && (
+                  <div className={styles.fileIndicator} onClick={(e) => e.stopPropagation()}>
+                    <FileCheck size={16} style={{ color: "var(--success)" }} />
+                    <span style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "150px" }}>
+                      {templateFile.name}
+                    </span>
+                    <span className={styles.removeFile} onClick={() => setTemplateFile(null)}>
+                      <Trash2 size={14} />
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Dropzone 2: Report */}
+              <div 
+                className={`${styles.uploadCard} ${reportFile ? styles.uploadCardActive : ""}`}
+                onDragOver={(e) => handleDragOver(e, "report")}
+                onDragLeave={() => handleDragLeave("report")}
+                onDrop={(e) => handleDrop(e, "report")}
+                onClick={() => clickInput(reportInputRef)}
+                style={{ borderColor: dragOverReport ? "var(--primary)" : "" }}
+              >
+                <input 
+                  type="file" 
+                  ref={reportInputRef} 
+                  accept=".docx,.pdf" 
+                  style={{ display: "none" }} 
+                  onChange={(e) => e.target.files && setReportFile(e.target.files[0])}
+                />
+                <div className={styles.uploadIconWrapper}>
+                  <FileText size={28} />
+                </div>
+                <div className={styles.uploadTitle}>2. Laporan Lengkap (.docx/.pdf)</div>
+                <div className={styles.uploadDesc}>Unggah Laporan Penelitian atau Laporan PKM yang ingin dikonversi menjadi jurnal.</div>
+                
+                {reportFile && (
+                  <div className={styles.fileIndicator} onClick={(e) => e.stopPropagation()}>
+                    <FileText size={16} style={{ color: "var(--success)" }} />
+                    <span style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "150px" }}>
+                      {reportFile.name}
+                    </span>
+                    <span className={styles.removeFile} onClick={() => setReportFile(null)}>
+                      <Trash2 size={14} />
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {status === "error" && (
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", color: "var(--danger)", marginBottom: "1rem" }}>
+                <AlertCircle size={16} />
+                <span className={styles.errorText}>{errorMsg}</span>
+              </div>
+            )}
+
+            <div className={styles.actionPanel}>
+              <button 
+                className={styles.btnGradient} 
+                disabled={!templateFile || !reportFile}
+                onClick={startGenerating}
+              >
+                <Wand2 size={20} />
+                Mulai Proses Konversi Jurnal
+              </button>
+              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Format didukung: Word (.docx) & PDF</span>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Phase 2: Processing Overlay */}
+      {status === "processing" ? (
+        <div className={styles.processingModal}>
+          <div className={`${styles.processingContent} glass-card`} style={{ padding: "2rem" }}>
+            <div className={styles.loaderRing}></div>
+            <h3 style={{ fontFamily: "var(--font-title)", fontSize: "1.25rem", fontWeight: 700, marginBottom: "0.5rem" }}>
+              Sedang Menyusun Jurnal Anda
+            </h3>
+            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+              AI Gemini sedang mengekstrak bab laporan dan merangkum naskah...
+            </p>
+
+            <div className={styles.stepList}>
+              <div className={`${styles.stepItem} ${currentStep > 1 ? styles.stepItemCompleted : currentStep === 1 ? styles.stepItemActive : ""}`}>
+                <div className={styles.stepDot}></div>
+                <span>Mendeteksi placeholder pada template naskah...</span>
+              </div>
+              <div className={`${styles.stepItem} ${currentStep > 2 ? styles.stepItemCompleted : currentStep === 2 ? styles.stepItemActive : ""}`}>
+                <div className={styles.stepDot}></div>
+                <span>Mengekstrak teks laporan penelitian via mammoth...</span>
+              </div>
+              <div className={`${styles.stepItem} ${currentStep > 3 ? styles.stepItemCompleted : currentStep === 3 ? styles.stepItemActive : ""}`}>
+                <div className={styles.stepDot}></div>
+                <span>Menyusun draf bagian jurnal dengan Gemini API...</span>
+              </div>
+              <div className={`${styles.stepItem} ${currentStep > 4 ? styles.stepItemCompleted : currentStep === 4 ? styles.stepItemActive : ""}`}>
+                <div className={styles.stepDot}></div>
+                <span>Melakukan estimasi Turnitin AI Detector awal...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Phase 3: Dashboard Workspace */}
+      {status === "done" || status === "checking" ? (
+        <div className={styles.workspaceProcessed}>
+          {/* Left panel: Dial, configuration */}
+          <div className={styles.controlPanel}>
+            {/* Turnitin Gauge */}
+            <div className={`${styles.turnitinPanel} glass-card`}>
+              <div className={styles.panelHeading} style={{ justifyContent: "center" }}>
+                {activeScore > 30 ? (
+                  <ShieldAlert size={18} style={{ color: "var(--danger)" }} />
+                ) : (
+                  <ShieldCheck size={18} style={{ color: "var(--success)" }} />
+                )}
+                <span>Turnitin AI Simulator</span>
+              </div>
+              <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginBottom: "0.5rem" }}>
+                Estimasi gaya bahasa mesin pada tab {activeTab.toUpperCase()}
+              </p>
+
+              {activeTab === "judul" || activeTab === "referensi" ? (
+                <div style={{ padding: "2rem 0", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                  Skor AI tidak dihitung untuk bagian Judul dan Referensi.
+                </div>
+              ) : (
+                <>
+                  <div className={styles.scoreBox}>
+                    <svg className={styles.scoreSvg}>
+                      <circle className={styles.scoreTrack} cx="70" cy="70" r="60" />
+                      <circle 
+                        className={styles.scoreFill} 
+                        cx="70" 
+                        cy="70" 
+                        r="60" 
+                        style={{ 
+                          stroke: dialColor, 
+                          strokeDashoffset: dialOffset,
+                          strokeDasharray: "377" 
+                        }}
+                      />
+                    </svg>
+                    <div className={styles.scoreTextWrapper}>
+                      <span className={styles.scoreNum} style={{ color: dialColor }}>{activeScore}%</span>
+                      <span className={styles.scoreLabel}>AI Content</span>
+                    </div>
+                  </div>
+
+                  <div className={styles.turnitinDetails}>
+                    <div className={styles.detailItem}>
+                      <span className={styles.detailVal} style={{ color: dialColor }}>{statusText}</span>
+                      <span className={styles.detailLbl}>Status Deteksi</span>
+                    </div>
+                    <div className={styles.detailItem}>
+                      <span className={styles.detailVal}>{activeScore > 0 ? Math.round(activeScore / 4.5 + 4) : 0}%</span>
+                      <span className={styles.detailLbl}>Similarity</span>
+                    </div>
+                  </div>
+
+                  {activeScore > 30 ? (
+                    <div className={`${styles.paraRecommendation} ${styles.paraRecRed}`}>
+                      <span style={{ color: "var(--danger)", fontWeight: 600 }}>Tindakan Disarankan:</span> Beberapa paragraf terdeteksi AI. Klik kalimat bergaris merah di dokumen kanan untuk paraphrase instan, atau klik <strong>Parafrase Otomatis</strong> di atas untuk memproses seluruh tab ini.
+                    </div>
+                  ) : (
+                    <div className={`${styles.paraRecommendation} ${styles.paraRecGreen}`}>
+                      <span style={{ color: "var(--success)", fontWeight: 600 }}>Naskah Aman:</span> Karakteristik gaya penulisan tab ini dinilai mirip dengan karya tulis manusia.
+                    </div>
+                  )}
+                  <button className={styles.btnGradient} onClick={paraphraseFullTab} type="button" style={{ marginTop: "0.5rem", width: "100%" }}>Parafrase Otomatis</button>
+                </>
+              )}
+            </div>
+
+            {/* Config panel */}
+            <div className="glass-card" style={{ padding: "1.5rem" }}>
+              <div className={styles.panelHeading}>
+                <Sliders size={18} style={{ color: "var(--primary)" }} />
+                <span>Konfigurasi Jurnal</span>
+              </div>
+              
+              <div className={styles.optionGroup}>
+                <div className={styles.toggleContainer}>
+                  <div>
+                    <div style={{ fontWeight: 500 }}>Terjemahan Scopus (En)</div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                      Translate naskah ke Bahasa Inggris
+                    </div>
+                  </div>
+                  <label className={styles.switch}>
+                    <input 
+                      type="checkbox" 
+                      checked={translate} 
+                      onChange={(e) => {
+                        setTranslate(e.target.checked);
+                        // In a real application, you would trigger translation endpoint here.
+                        // For the prototype we can alert or suggest re-generating.
+                      }}
+                    />
+                    <span className={styles.slider}></span>
+                  </label>
+                </div>
+
+                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", background: "rgba(255,255,255,0.02)", padding: "0.5rem", borderRadius: "6px", border: "1px solid var(--border-color)" }}>
+                  💡 Ganti tab editor untuk memantau, memvalidasi skor AI, dan merevisi bagian naskah.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right panel: Editor Workspace */}
+          <div className="glass-card states-editor-container" style={{ padding: "1.75rem", display: "flex", flexDirection: "column" }}>
+            <div className={styles.editorHeader}>
+              <div className={styles.editorTabs}>
+                {(Object.keys(journalData) as TabType[]).map((tab) => (
+                  <button 
+                    key={tab}
+                    className={`${styles.tabBtn} ${activeTab === tab ? styles.tabBtnActive : ""}`}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {tab.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+
+              {activeTab !== "judul" && activeTab !== "referensi" && (
+                <button 
+                  className={styles.btnSmall} 
+                  style={{ 
+                    background: "linear-gradient(135deg, var(--primary), var(--secondary))", 
+                    color: "white", 
+                    border: "none",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.25rem"
+                  }}
+                  disabled={status === "checking"}
+                  onClick={paraphraseFullTab}
+                >
+                  <RefreshCw size={12} className={status === "checking" ? "spin" : ""} />
+                  Parafrase Otomatis
+                </button>
+              )}
+            </div>
+
+            <div className={styles.editorWorkspace}>
+              {/* Draft Editor Textarea */}
+              <div className={styles.editorPane}>
+                <div className={styles.paneHeader}>
+                  <span>Editor Draf Jurnal</span>
+                  <span className={styles.paneBadge}>Dapat Diedit</span>
+                </div>
+                <textarea 
+                  className={styles.paneBody}
+                  value={journalData[activeTab]}
+                  onChange={(e) => {
+                    const textVal = e.target.value;
+                    setJournalData(prev => ({ ...prev, [activeTab]: textVal }));
+                  }}
+                  onBlur={() => checkCurrentTabAI()}
+                />
+              </div>
+
+              {/* Pre-layout Document Preview with highlights */}
+              <div className={styles.editorPane}>
+                <div className={styles.paneHeader}>
+                  <span>Hasil Output Layout Jurnal</span>
+                  <span className={styles.paneBadge} style={{ background: "rgba(16, 185, 129, 0.1)", color: "var(--success)" }}>
+                    Opsi A Tergabung
+                  </span>
+                </div>
+                <div className={`${styles.paneBody} ${styles.paneBodyPreview}`}>
+                  {renderPreviewWithHighlights()}
+                </div>
+              </div>
+            </div>
+
+            {/* Hover Popover Paraphrase Dialog */}
+            {popoverVisible && (
+              <div 
+                className={styles.paraphrasePopover}
+                style={{ left: `${popoverPos.x}px`, top: `${popoverPos.y}px` }}
+              >
+                <div className={styles.popoverHeader}>
+                  <span>Skor AI Tinggi Terdeteksi</span>
+                  <span style={{ color: "var(--danger)", fontWeight: 700 }}>Risiko AI</span>
+                </div>
+                <div className={styles.popoverBody} style={{ fontStyle: "italic" }}>
+                  "{popoverOriginalText}"
+                </div>
+                <div className={styles.popoverHeader} style={{ color: "var(--success)", marginTop: "0.5rem" }}>
+                  Saran Parafrase Gemini:
+                </div>
+                <div className={styles.popoverBody} style={{ borderColor: "rgba(16, 185, 129, 0.3)", background: "rgba(16, 185, 129, 0.03)" }}>
+                  {popoverLoading ? "Menghubungi AI Gemini untuk memparafase..." : popoverSuggestedText}
+                </div>
+                <div className={styles.popoverActions}>
+                  <button className={`${styles.btnSmall} ${styles.btnSmallSecondary}`} onClick={() => setPopoverVisible(false)}>
+                    Batal
+                  </button>
+                  <button 
+                    className={`${styles.btnSmall} ${styles.btnSmallPrimary}`} 
+                    disabled={popoverLoading || !popoverSuggestedText}
+                    onClick={applyPopoverParaphrase}
+                  >
+                    Terapkan Parafrase
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Export Footer */}
+            <div className={styles.exportFooter}>
+              <div className={styles.editorStatus}>
+                <div className="pulse-green" />
+                <span>Terintegrasi dengan template <strong>{templateFile?.name}</strong></span>
+              </div>
+              <button 
+                className={styles.btnGradient} 
+                style={{ padding: "0.75rem 1.75rem", fontSize: "0.95rem" }}
+                disabled={isExporting}
+                onClick={handleExportDocx}
+              >
+                <Download size={18} />
+                {isExporting ? "Mengekspor..." : "Ekspor & Download .docx"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Success Modal */}
+      {successModalVisible && (
+        <div className={styles.successModal}>
+          <div className={styles.successCard}>
+            <div className={styles.successIcon}>
+              <CheckCircle2 size={40} />
+            </div>
+            <h3 style={{ fontFamily: "var(--font-title)", fontSize: "1.5rem", fontWeight: 700, marginBottom: "0.5rem" }}>
+              Dokumen Sukses Diekspor!
+            </h3>
+            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", marginBottom: "1.5rem" }}>
+              Naskah hasil ekstraksi AI telah digabungkan ke dalam template Word target Anda. File <strong>naskah_jurnal_terformat.docx</strong> telah terunduh ke komputer Anda.
+            </p>
+            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
+              <button className={`${styles.btnSmall} ${styles.btnSmallPrimary}`} style={{ padding: "0.6rem 1.5rem" }} onClick={() => setSuccessModalVisible(false)}>
+                Selesai
+              </button>
+              <button 
+                className={`${styles.btnSmall} ${styles.btnSmallSecondary}`} 
+                style={{ padding: "0.6rem 1.5rem" }} 
+                onClick={() => {
+                  setSuccessModalVisible(false);
+                  setStatus("idle");
+                  setTemplateFile(null);
+                  setReportFile(null);
+                  setJournalData(initialJournalData);
+                }}
+              >
+                Buat Baru
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
