@@ -79,15 +79,16 @@ export async function POST(req: NextRequest) {
 
 Naskah jurnal harus ditulis dalam bahasa: ${targetLanguage}.
 
-TARGET PANJANG NASKAH (SANGAT PENTING):
-- Judul: 12 - 20 kata
-- Abstrak: 150 - 250 kata
-- Pendahuluan: 500 - 800 kata (jelaskan latar belakang detail, teori, urgensi, dan tujuan)
-- Metode: 400 - 700 kata (jelaskan pendekatan, sampel, dan instrumen secara rinci)
-- Hasil & Pembahasan: 1500 - 2500 kata (sangat penting! jabarkan semua temuan data, tabel/angka yang ada di laporan, dan bahas secara mendalam dengan teori)
-- Kesimpulan: 200 - 400 kata
+ATURAN STRICT TARGET PANJANG KATA (SANGAT PENTING - WAJIB DIPENUHI):
+Agar jurnal memiliki panjang standar 8 hingga 12 halaman dengan total kata keseluruhan (di luar referensi) berkisar antara 3.000 hingga 5.000 kata, Anda HARUS menulis setiap bagian secara sangat mendalam, kaya analisis, dan panjang, dengan rincian kata sebagai berikut:
+1. Judul: 12 - 20 kata (padat, akademik, representatif)
+2. Abstrak: 150 - 250 kata (berisi latar belakang, tujuan, metode, hasil utama, dan kesimpulan singkat)
+3. Pendahuluan: 500 - 800 kata (jabarkan latar belakang secara komprehensif, tinjauan pustaka dasar, teori pendukung, urgensi penelitian, dan rumusan tujuan secara mendalam)
+4. Metode: 400 - 700 kata (jelaskan secara rinci pendekatan penelitian, sampel/partisipan, teknik pengumpulan data, instrumen, dan prosedur analisis data)
+5. Hasil & Pembahasan: 1.500 - 2.500 kata (BAGIAN TERPENTING! Jangan dirangkum singkat. Jabarkan secara sangat mendetail seluruh temuan data, tabel, angka, analisis kuantitatif/kualitatif, bandingkan dengan teori pendukung, dan lakukan pembahasan akademis yang mendalam dan komprehensif)
+6. Kesimpulan: 200 - 400 kata (ringkasan kontribusi utama penelitian dan saran pengembangan)
 
-JANGAN SEKADAR MERANGKUM SINGKAT. Pertahankan kedalaman data, argumen, dan teori dari laporan asli. Tulis dalam paragraf-paragraf yang terstruktur rapi.
+JANGAN PERNAH MENYINGKAT ATAU MERANGKUM SEADANYA. Pertahankan keutuhan argumen ilmiah, kedalaman analisis data, rumus, dan teori dari laporan asli. Tulis dalam paragraf-paragraf akademik yang terstruktur rapi dan padat ilmiah. Total kata untuk Pendahuluan + Metode + Hasil & Pembahasan + Kesimpulan HARUS bernilai antara 3.000 hingga 5.000 kata.
 
 PENTING: Kembalikan HANYA JSON murni tanpa markdown, tanpa penjelasan, tanpa kode blok. Format:
 {

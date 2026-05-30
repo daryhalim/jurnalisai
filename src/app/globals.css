@@ -1,21 +1,21 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 :root {
-    --bg-base: #090d16;
-    --bg-surface: rgba(17, 24, 39, 0.7);
-    --bg-card: rgba(30, 41, 59, 0.45);
-    --border-color: rgba(255, 255, 255, 0.08);
-    --border-hover: rgba(99, 102, 241, 0.4);
+    --bg-base: #06202B;
+    --bg-surface: rgba(6, 32, 43, 0.75);
+    --bg-card: rgba(7, 122, 125, 0.08);
+    --border-color: rgba(122, 226, 207, 0.12);
+    --border-hover: rgba(122, 226, 207, 0.45);
     --text-primary: #f8fafc;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
-    --primary: #6366f1;
-    --primary-glow: rgba(99, 102, 241, 0.15);
-    --secondary: #a855f7;
-    --accent: #14b8a6;
+    --text-secondary: #92b2ba;
+    --text-muted: #4a727a;
+    --primary: #077A7D;
+    --primary-glow: rgba(7, 122, 125, 0.2);
+    --secondary: #7AE2CF;
+    --accent: #FDEB9E;
     --danger: #ef4444;
-    --warning: #f59e0b;
-    --success: #10b981;
+    --warning: #FDEB9E;
+    --success: #7AE2CF;
     --font-main: 'Inter', sans-serif;
     --font-title: 'Plus Jakarta Sans', sans-serif;
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -36,8 +36,8 @@ html, body {
     font-family: var(--font-main);
     overflow-x: hidden;
     background-image: 
-        radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
-        radial-gradient(circle at 90% 80%, rgba(168, 85, 247, 0.06) 0%, transparent 45%);
+        radial-gradient(circle at 10% 20%, rgba(7, 122, 125, 0.15) 0%, transparent 45%),
+        radial-gradient(circle at 90% 80%, rgba(122, 226, 207, 0.1) 0%, transparent 45%);
     background-attachment: fixed;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
