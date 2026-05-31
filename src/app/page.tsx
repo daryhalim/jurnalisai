@@ -134,10 +134,32 @@ export default function Home() {
       alert("Pemotongan teks dilarang! Gunakan tombol 'Ekspor & Download .docx' di bagian bawah untuk mengunduh hasil jurnal Anda.");
     };
 
-    // Keyboard protection (blocks Ctrl+C, Cmd+C, Ctrl+X, Cmd+X, Ctrl+P, Cmd+P, PrintScreen)
+    // Keyboard protection (blocks Ctrl+C, Cmd+C, Ctrl+X, Cmd+X, Ctrl+P, Cmd+P, PrintScreen, Cmd+Shift+3/4/5, Win+Shift+S)
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
-      const isMetaOrCtrl = e.ctrlKey || e.metaKey;
+      const isMeta = e.metaKey;
+      const isCtrl = e.ctrlKey;
+      const isShift = e.shiftKey;
+      const isMetaOrCtrl = isMeta || isCtrl;
+
+      // Detect macOS screenshot shortcuts: Cmd + Shift + 3, 4, 5
+      if (isMeta && isShift && (key === '3' || key === '4' || key === '5')) {
+        document.body.classList.add("blur-content");
+        // Maintain white-out screen for 2.5 seconds to fully cover OS capture time, then restore automatically
+        setTimeout(() => {
+          document.body.classList.remove("blur-content");
+        }, 2500);
+        return;
+      }
+
+      // Detect Windows screenshot shortcut: Win + Shift + S
+      if (isMeta && isShift && key === 's') {
+        document.body.classList.add("blur-content");
+        setTimeout(() => {
+          document.body.classList.remove("blur-content");
+        }, 2500);
+        return;
+      }
 
       if (isMetaOrCtrl && (key === 'c' || key === 'x')) {
         e.preventDefault();
@@ -151,6 +173,10 @@ export default function Home() {
 
       if (e.key === 'PrintScreen') {
         navigator.clipboard.writeText('');
+        document.body.classList.add("blur-content");
+        setTimeout(() => {
+          document.body.classList.remove("blur-content");
+        }, 2500);
         alert("Tangkapan layar dilarang!");
       }
     };
