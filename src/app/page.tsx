@@ -114,12 +114,75 @@ export default function Home() {
   const [successModalVisible, setSuccessModalVisible] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
-  // Load API Key from localstorage on mount
+  // Load API Key from localstorage on mount and enforce anti-copy/anti-screenshot
   useEffect(() => {
     const savedKey = localStorage.getItem("gemini_api_key");
     if (savedKey) {
       setApiKey(savedKey);
     }
+
+    // Intercept Copy event
+    const handleCopy = (e: ClipboardEvent) => {
+      e.preventDefault();
+      alert("Penyalinan teks dilarang! Gunakan tombol 'Ekspor & Download .docx' di bagian bawah untuk mengunduh hasil jurnal Anda.");
+    };
+
+    // Intercept Cut event
+    const handleCut = (e: ClipboardEvent) => {
+      e.preventDefault();
+      alert("Pemotongan teks dilarang! Gunakan tombol 'Ekspor & Download .docx' di bagian bawah untuk mengunduh hasil jurnal Anda.");
+    };
+
+    // Keyboard protection (blocks Ctrl+C, Cmd+C, Ctrl+X, Cmd+X, Ctrl+P, Cmd+P, PrintScreen)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      const isMetaOrCtrl = e.ctrlKey || e.metaKey;
+
+      if (isMetaOrCtrl && (key === 'c' || key === 'x')) {
+        e.preventDefault();
+        alert("Penyalinan teks dilarang! Silakan unduh file hasil dengan menekan tombol 'Ekspor & Download .docx' di bagian bawah.");
+      }
+
+      if (isMetaOrCtrl && key === 'p') {
+        e.preventDefault();
+        alert("Pencetakan dokumen dilarang!");
+      }
+
+      if (e.key === 'PrintScreen') {
+        navigator.clipboard.writeText('');
+        alert("Tangkapan layar dilarang!");
+      }
+    };
+
+    // Right click prevention
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
+    // Anti-screenshot window blur behavior
+    const handleBlur = () => {
+      document.body.classList.add("blur-content");
+    };
+
+    const handleFocus = () => {
+      document.body.classList.remove("blur-content");
+    };
+
+    document.addEventListener("copy", handleCopy);
+    document.addEventListener("cut", handleCut);
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("contextmenu", handleContextMenu);
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      document.removeEventListener("copy", handleCopy);
+      document.removeEventListener("cut", handleCut);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("contextmenu", handleContextMenu);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
 
   const saveApiKey = (key: string) => {
