@@ -75,9 +75,27 @@ export async function POST(req: NextRequest) {
       ? "English (Scopus style)"
       : "the same language as the report (Indonesian)";
 
+    const citationStyle = (formData.get("citationStyle") as string | null) || "apa7";
+
+    let citationInstruction = "";
+    if (citationStyle === "ieee") {
+      citationInstruction = "Gunakan format IEEE. Semua sitasi di dalam teks wajib menggunakan nomor berurutan dalam kurung siku, misalnya [1], [2], [3], dst. Pastikan setiap sitasi di dalam teks 'pendahuluan', 'metode', dan 'hasil' bersesuaian secara persis dengan nomor pada daftar 'referensi'.";
+    } else if (citationStyle === "harvard") {
+      citationInstruction = "Gunakan format Harvard. Sitasi di dalam teks menggunakan format (Nama Penulis, Tahun), misalnya (Pressman, 2015) atau (Jogiyanto & Sulistyo, 2018). Referensi di daftar referensi harus diurutkan secara abjad berdasarkan nama belakang penulis pertama.";
+    } else if (citationStyle === "vancouver") {
+      citationInstruction = "Gunakan format Vancouver. Sitasi di dalam teks berupa angka numerik dalam kurung siku berdasarkan urutan pemunculan pertama kali di naskah, misalnya [1], [2].";
+    } else { // apa7 (default)
+      citationInstruction = "Gunakan format APA Edisi ke-7 (APA 7th Edition). Sitasi di dalam teks wajib menggunakan format (Nama Belakang, Tahun), misalnya (Pressman, 2015) atau (Author1 & Author2, 2020) atau (Author et al., 2021). Pastikan sitasi tertulis secara rapi dan sinkron antara badan naskah dan daftar 'referensi'.";
+    }
+
     const systemPrompt = `Anda adalah Asisten Penulisan Jurnal Ilmiah Akademik Profesional. Tugas utama Anda adalah mengonversi Laporan Penelitian atau Laporan Pengabdian Masyarakat (PKM) yang panjang menjadi naskah jurnal ilmiah standar yang sangat komprehensif dan mendalam.
 
 Naskah jurnal harus ditulis dalam bahasa: ${targetLanguage}.
+
+SINKRONISASI SITASI & DAFTAR PUSTAKA (SANGAT PENTING):
+1. Anda wajib mengekstrak dan mempertahankan KUTIPAN/SITASI asli dari laporan penelitian Anda dan memasukkannya ke dalam teks jurnal yang Anda buat (terutama di bagian Pendahuluan, Metode, dan Hasil & Pembahasan).
+2. Jangan sampai kutipan hilang! Kutipan di dalam teks harus bersinkronisasi secara sempurna dengan daftar pustaka yang Anda hasilkan di field "referensi". Jika di daftar referensi tertulis pustaka tertentu, maka di dalam teks naskah (pendahuluan/metode/hasil) wajib ada sitasi yang mereferensikan pustaka tersebut.
+3. Aturan Format Sitasi & Referensi: ${citationInstruction}
 
 ATURAN STRICT TARGET PANJANG KATA (SANGAT PENTING - WAJIB DIPENUHI):
 Agar jurnal memiliki panjang standar 8 hingga 12 halaman dengan total kata keseluruhan (di luar referensi) berkisar antara 3.000 hingga 5.000 kata, Anda HARUS menulis setiap bagian secara sangat mendalam, kaya analisis, dan panjang, dengan rincian kata sebagai berikut:

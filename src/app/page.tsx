@@ -68,6 +68,7 @@ export default function Home() {
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [translate, setTranslate] = useState<boolean>(false);
+  const [citationStyle, setCitationStyle] = useState<string>("apa7");
 
   // Journal Workspace State
   const [journalData, setJournalData] = useState<JournalData>(initialJournalData);
@@ -242,6 +243,7 @@ export default function Home() {
       const formData = new FormData();
       formData.append("report", reportFile);
       formData.append("translate", String(translate));
+      formData.append("citationStyle", citationStyle);
 
       const processRes = await fetch("/api/process", {
         method: "POST",
@@ -835,6 +837,34 @@ export default function Home() {
                     />
                     <span className={styles.slider}></span>
                   </label>
+                </div>
+
+                <div className={styles.toggleContainer} style={{ flexDirection: "column", alignItems: "stretch", gap: "0.75rem" }}>
+                  <div>
+                    <div style={{ fontWeight: 500 }}>Gaya Sitasi & Daftar Pustaka</div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                      Pilih format kutipan naskah jurnal
+                    </div>
+                  </div>
+                  <select 
+                    value={citationStyle}
+                    onChange={(e) => setCitationStyle(e.target.value)}
+                    style={{
+                      background: "rgba(0, 0, 0, 0.25)",
+                      border: "1px solid var(--border-color)",
+                      borderRadius: "8px",
+                      padding: "0.5rem 0.75rem",
+                      color: "white",
+                      fontSize: "0.85rem",
+                      outline: "none",
+                      cursor: "pointer"
+                    }}
+                  >
+                    <option value="apa7" style={{ background: "#06202B", color: "white" }}>APA 7th Edition (Nama, Tahun)</option>
+                    <option value="ieee" style={{ background: "#06202B", color: "white" }}>IEEE Style ([1], [2])</option>
+                    <option value="harvard" style={{ background: "#06202B", color: "white" }}>Harvard Style</option>
+                    <option value="vancouver" style={{ background: "#06202B", color: "white" }}>Vancouver Style (Numerik)</option>
+                  </select>
                 </div>
 
                 <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", background: "rgba(255,255,255,0.02)", padding: "0.5rem", borderRadius: "6px", border: "1px solid var(--border-color)" }}>
