@@ -113,10 +113,16 @@ input, textarea {
     user-select: text;
 }
 
-/* Anti-Screenshot blur */
+/* Anti-Screenshot white-out */
 .blur-content {
-    filter: blur(15px) !important;
-    transition: filter 0.15s ease-in-out;
+    background-color: #ffffff !important;
+    background-image: none !important;
+    transition: background-color 0.1s ease-in-out;
+}
+
+.blur-content * {
+    opacity: 0 !important;
+    visibility: hidden !important;
 }
 
 /* Prevent Print / PDF export */
