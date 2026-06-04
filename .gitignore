@@ -47,3 +47,7 @@ node-env
 
 # Local Netlify folder
 .netlify
+
+# Nested node modules
+node_modules/
+electron/node_modules/

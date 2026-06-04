@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -11,9 +12,22 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const midtransClientKey = process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY || '';
+  const isProduction = process.env.MIDTRANS_IS_PRODUCTION === 'true';
+  const snapUrl = isProduction
+    ? 'https://app.midtrans.com/snap/snap.js'
+    : 'https://app.sandbox.midtrans.com/snap/snap.js';
+
   return (
     <html lang="id">
-      <body>{children}</body>
+      <body>
+        {children}
+        <Script
+          src={snapUrl}
+          data-client-key={midtransClientKey}
+          strategy="lazyOnload"
+        />
+      </body>
     </html>
   );
 }

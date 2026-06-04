@@ -129,6 +129,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // NOTE: Payment verification disabled (free mode)
+    // Uncomment the block below when Midtrans is configured
+    // const orderId = formData.get("orderId") as string | null;
+    // if (orderId && process.env.MIDTRANS_SERVER_KEY) { ... verify payment ... }
+
     const journalData: JournalData = JSON.parse(dataString);
 
     // =====================================================

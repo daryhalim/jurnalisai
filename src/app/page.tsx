@@ -1,10 +1,26 @@
 "use client";
 
+// Midtrans Snap type declaration
+declare global {
+  interface Window {
+    snap: {
+      pay: (
+        token: string,
+        options: {
+          onSuccess?: (result: any) => void;
+          onPending?: (result: any) => void;
+          onError?: (result: any) => void;
+          onClose?: () => void;
+        }
+      ) => void;
+    };
+  }
+}
+
 import React, { useState, useEffect, useRef } from "react";
 import { 
   Sparkles, 
   FileText, 
-  FileCheck, 
   Trash2, 
   Wand2, 
   ShieldAlert, 
@@ -54,11 +70,9 @@ type TabType = keyof JournalData;
 
 export default function Home() {
   // File Upload State
-  const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [reportFile, setReportFile] = useState<File | null>(null);
   
   // Refs for file inputs
-  const templateInputRef = useRef<HTMLInputElement>(null);
   const reportInputRef = useRef<HTMLInputElement>(null);
 
   // App API & Status State
@@ -125,6 +139,9 @@ export default function Home() {
     // Intercept Copy event
     const handleCopy = (e: ClipboardEvent) => {
       e.preventDefault();
+      if (e.clipboardData) {
+        e.clipboardData.setData('text/plain', '');
+      }
       alert("Penyalinan teks dilarang! Gunakan tombol 'Ekspor & Download .docx' di bagian bawah untuk mengunduh hasil jurnal Anda.");
     };
 
@@ -134,7 +151,7 @@ export default function Home() {
       alert("Pemotongan teks dilarang! Gunakan tombol 'Ekspor & Download .docx' di bagian bawah untuk mengunduh hasil jurnal Anda.");
     };
 
-    // Keyboard protection (blocks Ctrl+C, Cmd+C, Ctrl+X, Cmd+X, Ctrl+P, Cmd+P, PrintScreen, Cmd+Shift+3/4/5, Win+Shift+S)
+    // Keyboard protection
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       const isMeta = e.metaKey;
@@ -144,20 +161,21 @@ export default function Home() {
 
       // Detect macOS screenshot shortcuts: Cmd + Shift + 3, 4, 5
       if (isMeta && isShift && (key === '3' || key === '4' || key === '5')) {
+        e.preventDefault();
         document.body.classList.add("blur-content");
-        // Maintain white-out screen for 2.5 seconds to fully cover OS capture time, then restore automatically
         setTimeout(() => {
           document.body.classList.remove("blur-content");
-        }, 2500);
+        }, 3000);
         return;
       }
 
       // Detect Windows screenshot shortcut: Win + Shift + S
       if (isMeta && isShift && key === 's') {
+        e.preventDefault();
         document.body.classList.add("blur-content");
         setTimeout(() => {
           document.body.classList.remove("blur-content");
-        }, 2500);
+        }, 3000);
         return;
       }
 
@@ -172,11 +190,12 @@ export default function Home() {
       }
 
       if (e.key === 'PrintScreen') {
+        e.preventDefault();
         navigator.clipboard.writeText('');
         document.body.classList.add("blur-content");
         setTimeout(() => {
           document.body.classList.remove("blur-content");
-        }, 2500);
+        }, 3000);
         alert("Tangkapan layar dilarang!");
       }
     };
@@ -186,31 +205,49 @@ export default function Home() {
       e.preventDefault();
     };
 
-    // Anti-screenshot window blur behavior
+    // Layer 2: Visibility change detection (more reliable than blur)
+    // This fires when user switches apps or macOS screenshot tool activates
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        document.body.classList.add("blur-content");
+      } else {
+        // Delay removing blur to ensure screenshot capture window has passed
+        setTimeout(() => {
+          document.body.classList.remove("blur-content");
+        }, 500);
+      }
+    };
+
+    // Fallback: window blur/focus (backup for visibility change)
     const handleBlur = () => {
       document.body.classList.add("blur-content");
     };
 
     const handleFocus = () => {
-      document.body.classList.remove("blur-content");
+      setTimeout(() => {
+        document.body.classList.remove("blur-content");
+      }, 300);
     };
 
     document.addEventListener("copy", handleCopy);
     document.addEventListener("cut", handleCut);
-    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown, true);
     document.addEventListener("contextmenu", handleContextMenu);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("blur", handleBlur);
     window.addEventListener("focus", handleFocus);
 
     return () => {
       document.removeEventListener("copy", handleCopy);
       document.removeEventListener("cut", handleCut);
-      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keydown", handleKeyDown, true);
       document.removeEventListener("contextmenu", handleContextMenu);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleBlur);
       window.removeEventListener("focus", handleFocus);
     };
   }, []);
+
 
   const saveApiKey = (key: string) => {
     setApiKey(key);
@@ -223,28 +260,23 @@ export default function Home() {
   };
 
   // Handle drag and drop visuals
-  const [dragOverTemplate, setDragOverTemplate] = useState(false);
   const [dragOverReport, setDragOverReport] = useState(false);
 
-  const handleDragOver = (e: React.DragEvent, type: "template" | "report") => {
+  const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    if (type === "template") setDragOverTemplate(true);
-    else setDragOverReport(true);
+    setDragOverReport(true);
   };
 
-  const handleDragLeave = (type: "template" | "report") => {
-    if (type === "template") setDragOverTemplate(false);
-    else setDragOverReport(false);
+  const handleDragLeave = () => {
+    setDragOverReport(false);
   };
 
-  const handleDrop = (e: React.DragEvent, type: "template" | "report") => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    handleDragLeave(type);
+    handleDragLeave();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
-      if (type === "template" && file.name.endsWith(".docx")) {
-        setTemplateFile(file);
-      } else if (type === "report" && (file.name.endsWith(".docx") || file.name.endsWith(".pdf"))) {
+      if (file.name.endsWith(".docx") || file.name.endsWith(".pdf")) {
         setReportFile(file);
       }
     }
@@ -252,7 +284,7 @@ export default function Home() {
 
   // Main Generator Logic
   const startGenerating = async () => {
-    if (!reportFile || !templateFile) return;
+    if (!reportFile) return;
 
     setStatus("processing");
     setCurrentStep(0);
@@ -449,7 +481,7 @@ export default function Home() {
     }
   };
 
-  // Export filled document to DOCX — generates a new file with all journal data
+  // Export filled document to DOCX — direct download (free mode)
   const handleExportDocx = async () => {
     setIsExporting(true);
     try {
@@ -462,7 +494,7 @@ export default function Home() {
       });
 
       if (!res.ok) {
-        throw new Error("Gagal mengunduh dokumen hasil penggabungan template.");
+        throw new Error("Gagal mengunduh dokumen.");
       }
 
       const blob = await res.blob();
@@ -566,6 +598,10 @@ export default function Home() {
   };
 
   return (
+    <>
+      {/* Screen Shield DRM overlay */}
+      <div className="screen-shield" aria-hidden="true" />
+      
     <div className={styles.container}>
       {/* Header */}
       <header className={styles.header}>
@@ -624,7 +660,7 @@ export default function Home() {
       <div className={styles.tutorialBanner}>
         <Info size={20} />
         <div className={styles.tutorialText}>
-          <strong>Cara Kerja:</strong> Unggah template jurnal target sebagai <strong>referensi format</strong> dan laporan penelitian Anda. AI akan mengekstrak &amp; menyusun naskah jurnal lengkap. Setelah diedit &amp; lolos Turnitin Checker, klik <strong>Ekspor &amp; Download</strong> untuk mengunduh file <code>.docx</code> jurnal yang sudah jadi.
+          <strong>Cara Kerja:</strong> Unggah laporan penelitian atau PKM Anda. AI akan mengekstrak &amp; menyusun naskah jurnal ilmiah lengkap secara otomatis. Setelah diedit &amp; lolos Turnitin Checker, klik <strong>Ekspor &amp; Download</strong> untuk mengunduh file <code>.docx</code> jurnal yang sudah jadi.
         </div>
       </div>
 
@@ -632,55 +668,20 @@ export default function Home() {
       {status === "idle" || status === "error" ? (
         <div className={styles.workspace}>
           <div className="glass-card" style={{ padding: "2rem" }}>
-            <h2 style={{ fontFamily: "var(--font-title)", fontWeight: 700, marginBottom: "0.5rem" }}>Unggah Dokumen</h2>
+            <h2 style={{ fontFamily: "var(--font-title)", fontWeight: 700, marginBottom: "0.5rem" }}>Unggah Laporan Penelitian</h2>
             <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", marginBottom: "2rem" }}>
-              Siapkan file laporan penelitian dan template jurnal Anda untuk dianalisis oleh AI.
+              Upload file laporan penelitian atau PKM Anda untuk dikonversi menjadi naskah jurnal ilmiah oleh AI.
             </p>
 
-            <div className={styles.uploadSection}>
-              {/* Dropzone 1: Template */}
-              <div 
-                className={`${styles.uploadCard} ${templateFile ? styles.uploadCardActive : ""}`}
-                onDragOver={(e) => handleDragOver(e, "template")}
-                onDragLeave={() => handleDragLeave("template")}
-                onDrop={(e) => handleDrop(e, "template")}
-                onClick={() => clickInput(templateInputRef)}
-                style={{ borderColor: dragOverTemplate ? "var(--primary)" : "" }}
-              >
-                <input 
-                  type="file" 
-                  ref={templateInputRef} 
-                  accept=".docx" 
-                  style={{ display: "none" }} 
-                  onChange={(e) => e.target.files && setTemplateFile(e.target.files[0])}
-                />
-                <div className={styles.uploadIconWrapper}>
-                  <FileCheck size={28} />
-                </div>
-                <div className={styles.uploadTitle}>1. Template Jurnal Target</div>
-                <div className={styles.uploadDesc}>Tarik file template Word (.docx) yang sudah berisi tag placeholder ke sini.</div>
-                
-                {templateFile && (
-                  <div className={styles.fileIndicator} onClick={(e) => e.stopPropagation()}>
-                    <FileCheck size={16} style={{ color: "var(--success)" }} />
-                    <span style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "150px" }}>
-                      {templateFile.name}
-                    </span>
-                    <span className={styles.removeFile} onClick={() => setTemplateFile(null)}>
-                      <Trash2 size={14} />
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Dropzone 2: Report */}
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              {/* Dropzone: Report */}
               <div 
                 className={`${styles.uploadCard} ${reportFile ? styles.uploadCardActive : ""}`}
-                onDragOver={(e) => handleDragOver(e, "report")}
-                onDragLeave={() => handleDragLeave("report")}
-                onDrop={(e) => handleDrop(e, "report")}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
                 onClick={() => clickInput(reportInputRef)}
-                style={{ borderColor: dragOverReport ? "var(--primary)" : "" }}
+                style={{ borderColor: dragOverReport ? "var(--primary)" : "", maxWidth: "480px", width: "100%" }}
               >
                 <input 
                   type="file" 
@@ -692,13 +693,13 @@ export default function Home() {
                 <div className={styles.uploadIconWrapper}>
                   <FileText size={28} />
                 </div>
-                <div className={styles.uploadTitle}>2. Laporan Lengkap (.docx/.pdf)</div>
-                <div className={styles.uploadDesc}>Unggah Laporan Penelitian atau Laporan PKM yang ingin dikonversi menjadi jurnal.</div>
+                <div className={styles.uploadTitle}>Laporan Penelitian / PKM</div>
+                <div className={styles.uploadDesc}>Tarik file Word (.docx) atau PDF ke sini, atau klik untuk memilih file.</div>
                 
                 {reportFile && (
                   <div className={styles.fileIndicator} onClick={(e) => e.stopPropagation()}>
                     <FileText size={16} style={{ color: "var(--success)" }} />
-                    <span style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "150px" }}>
+                    <span style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", maxWidth: "200px" }}>
                       {reportFile.name}
                     </span>
                     <span className={styles.removeFile} onClick={() => setReportFile(null)}>
@@ -710,7 +711,7 @@ export default function Home() {
             </div>
 
             {status === "error" && (
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", color: "var(--danger)", marginBottom: "1rem" }}>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", color: "var(--danger)", marginBottom: "1rem", marginTop: "1rem" }}>
                 <AlertCircle size={16} />
                 <span className={styles.errorText}>{errorMsg}</span>
               </div>
@@ -719,7 +720,7 @@ export default function Home() {
             <div className={styles.actionPanel}>
               <button 
                 className={styles.btnGradient} 
-                disabled={!templateFile || !reportFile}
+                disabled={!reportFile}
                 onClick={startGenerating}
               >
                 <Wand2 size={20} />
@@ -746,7 +747,7 @@ export default function Home() {
             <div className={styles.stepList}>
               <div className={`${styles.stepItem} ${currentStep > 1 ? styles.stepItemCompleted : currentStep === 1 ? styles.stepItemActive : ""}`}>
                 <div className={styles.stepDot}></div>
-                <span>Mendeteksi placeholder pada template naskah...</span>
+                <span>Membaca isi laporan penelitian...</span>
               </div>
               <div className={`${styles.stepItem} ${currentStep > 2 ? styles.stepItemCompleted : currentStep === 2 ? styles.stepItemActive : ""}`}>
                 <div className={styles.stepDot}></div>
@@ -1005,7 +1006,7 @@ export default function Home() {
             <div className={styles.exportFooter}>
               <div className={styles.editorStatus}>
                 <div className="pulse-green" />
-                <span>Terintegrasi dengan template <strong>{templateFile?.name}</strong></span>
+                <span>Siap untuk diexport</span>
               </div>
               <button 
                 className={styles.btnGradient} 
@@ -1032,7 +1033,7 @@ export default function Home() {
               Dokumen Sukses Diekspor!
             </h3>
             <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", marginBottom: "1.5rem" }}>
-              Naskah hasil ekstraksi AI telah digabungkan ke dalam template Word target Anda. File <strong>naskah_jurnal_terformat.docx</strong> telah terunduh ke komputer Anda.
+              Naskah jurnal ilmiah Anda telah berhasil dibuat. File <strong>naskah_jurnal_terformat.docx</strong> telah terunduh ke komputer Anda.
             </p>
             <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
               <button className={`${styles.btnSmall} ${styles.btnSmallPrimary}`} style={{ padding: "0.6rem 1.5rem" }} onClick={() => setSuccessModalVisible(false)}>
@@ -1044,7 +1045,7 @@ export default function Home() {
                 onClick={() => {
                   setSuccessModalVisible(false);
                   setStatus("idle");
-                  setTemplateFile(null);
+                  setReportFile(null);
                   setReportFile(null);
                   setJournalData(initialJournalData);
                 }}
@@ -1056,5 +1057,6 @@ export default function Home() {
         </div>
       )}
     </div>
+    </>
   );
 }

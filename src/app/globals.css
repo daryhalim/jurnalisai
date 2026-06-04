@@ -98,7 +98,11 @@ a {
     to { transform: scale(1); opacity: 1; }
 }
 
-/* Protection from Copy and Print */
+/* ====================================================================
+   CONTENT PROTECTION SYSTEM
+   ==================================================================== */
+
+/* 1. Disable text selection globally */
 body {
     -webkit-user-select: none;
     -moz-user-select: none;
@@ -106,6 +110,7 @@ body {
     user-select: none;
 }
 
+/* Allow selection only in input/textarea for editing */
 input, textarea {
     -webkit-user-select: text;
     -moz-user-select: text;
@@ -113,22 +118,48 @@ input, textarea {
     user-select: text;
 }
 
-/* Anti-Screenshot white-out */
-.blur-content {
-    background-color: #ffffff !important;
-    background-image: none !important;
-    transition: background-color 0.1s ease-in-out;
+/* 2. DRM Screen Shield — Always-present overlay using CSS filter trick
+   The screen-shield div and content-wrapper use complementary CSS filters.
+   In normal browser rendering they cancel out (content looks normal).
+   But OS-level screenshot tools capture the composited bitmap differently. */
+.screen-shield {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 999999;
+    pointer-events: none;
+    /* Semi-transparent overlay with mix-blend-mode */
+    background: rgba(255, 255, 255, 0.003);
+    mix-blend-mode: overlay;
 }
 
-.blur-content * {
-    opacity: 0 !important;
-    visibility: hidden !important;
+/* 3. Blur-content white-out — triggered by JS on blur/visibilitychange/keydown */
+body.blur-content::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #ffffff;
+    z-index: 999998;
+    pointer-events: none;
 }
 
-/* Prevent Print / PDF export */
+/* 4. Prevent Print / PDF export via browser */
 @media print {
     body {
         display: none !important;
     }
-}
 
+    html::after {
+        content: 'Pencetakan dokumen ini dilarang.';
+        display: block;
+        font-size: 24px;
+        text-align: center;
+        padding: 50px;
+        color: #333;
+    }
+}

@@ -1,0 +1,59 @@
+{
+  "name": "jurnalis-ai-desktop",
+  "version": "1.0.0",
+  "description": "Jurnalis.AI — Desktop App dengan proteksi anti-screenshot DRM",
+  "main": "main.js",
+  "author": "Jurnalis.AI",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:all": "electron-builder --mac --win"
+  },
+  "build": {
+    "appId": "com.jurnalisai.desktop",
+    "productName": "Jurnalis.AI",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "icons/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "icons/icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "icon": "icons/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "icons/icon.png",
+      "uninstallerIcon": "icons/icon.png"
+    }
+  },
+  "devDependencies": {
+    "electron": "^42.3.0",
+    "electron-builder": "^26.8.1"
+  }
+}

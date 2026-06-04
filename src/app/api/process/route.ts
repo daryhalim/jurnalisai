@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import mammoth from "mammoth";
 
-const KIE_API_KEY = process.env.KIE_API_KEY || "a78ff25836b2d31011ce5b8dc6ce1887";
+const KIE_API_KEY = process.env.KIE_API_KEY || "";
 const KIE_API_URL = "https://api.kie.ai/gemini-2.5-flash/v1/chat/completions";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
 async function callKieAI(prompt: string): Promise<string> {
+  if (!KIE_API_KEY) {
+    throw new Error("KIE_API_KEY not configured");
+  }
+
   const response = await fetch(KIE_API_URL, {
     method: "POST",
     headers: {
@@ -19,30 +24,130 @@ async function callKieAI(prompt: string): Promise<string> {
 
   if (!response.ok) {
     const errBody = await response.text();
-    throw new Error(`KIE API error ${response.status}: ${errBody}`);
+    console.error(`[KIE API] Error ${response.status}:`, errBody.substring(0, 500));
+    throw new Error(`KIE API error ${response.status}: ${errBody.substring(0, 200)}`);
   }
 
   const data = await response.json();
   const rawText = data.choices?.[0]?.message?.content || "";
+  console.log("[KIE /process] raw response length:", rawText.length);
   console.log("[KIE /process] raw response preview:", rawText.substring(0, 300));
 
-  // Try to parse just in case it wraps it in another JSON
+  if (!rawText.trim()) {
+    throw new Error("KIE API returned empty content");
+  }
+
+  return rawText;
+}
+
+async function callGeminiDirect(prompt: string): Promise<string> {
+  if (!GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY not configured");
+  }
+
+  console.log("[Gemini Direct] Falling back to direct Gemini API...");
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 16000,
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    console.error(`[Gemini Direct] Error ${response.status}:`, errBody.substring(0, 500));
+    throw new Error(`Gemini API error ${response.status}: ${errBody.substring(0, 200)}`);
+  }
+
+  const data = await response.json();
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  console.log("[Gemini Direct] response length:", rawText.length);
+  console.log("[Gemini Direct] response preview:", rawText.substring(0, 300));
+
+  if (!rawText.trim()) {
+    throw new Error("Gemini API returned empty content");
+  }
+
+  return rawText;
+}
+
+// Try KIE first, fallback to Gemini Direct
+async function callAI(prompt: string): Promise<string> {
   try {
-    const parsed = JSON.parse(rawText);
-    if (parsed.judul || parsed.abstrak) return rawText;
-    const text = parsed.text ?? parsed.content ?? parsed.result ?? parsed.output ?? parsed.response ?? rawText;
-    return typeof text === "string" ? text : JSON.stringify(text);
-  } catch {
-    return rawText;
+    return await callKieAI(prompt);
+  } catch (kieError: any) {
+    console.warn("[callAI] KIE API failed:", kieError.message);
+    console.log("[callAI] Trying direct Gemini API fallback...");
+    return await callGeminiDirect(prompt);
   }
 }
 
 function extractJSON(text: string): any {
-  const stripped = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
-  try { return JSON.parse(stripped); } catch {}
-  const match = stripped.match(/\{[\s\S]*\}/);
-  if (match) return JSON.parse(match[0]);
-  throw new Error("No valid JSON found in model response.");
+  if (!text || !text.trim()) {
+    throw new Error("Model response is empty. API mungkin tidak merespons.");
+  }
+
+  // Log raw response for debugging
+  console.log("[extractJSON] Raw text length:", text.length);
+  console.log("[extractJSON] First 500 chars:", text.substring(0, 500));
+
+  // Strategy 1: Try parsing the raw text directly
+  try {
+    const parsed = JSON.parse(text.trim());
+    if (parsed.judul || parsed.abstrak || parsed.pendahuluan) return parsed;
+  } catch {}
+
+  // Strategy 2: Strip markdown code blocks (```json ... ``` or ``` ... ```)
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    try {
+      const parsed = JSON.parse(codeBlockMatch[1].trim());
+      if (parsed.judul || parsed.abstrak) return parsed;
+    } catch {}
+  }
+
+  // Strategy 3: Find the first { ... } block (greedy match for outermost braces)
+  let braceStart = text.indexOf('{');
+  if (braceStart !== -1) {
+    let depth = 0;
+    let braceEnd = -1;
+    for (let i = braceStart; i < text.length; i++) {
+      if (text[i] === '{') depth++;
+      if (text[i] === '}') depth--;
+      if (depth === 0) {
+        braceEnd = i;
+        break;
+      }
+    }
+    if (braceEnd !== -1) {
+      const jsonCandidate = text.substring(braceStart, braceEnd + 1);
+      try {
+        const parsed = JSON.parse(jsonCandidate);
+        if (parsed.judul || parsed.abstrak || parsed.pendahuluan) return parsed;
+      } catch {}
+    }
+  }
+
+  // Strategy 4: Simple regex fallback
+  const regexMatch = text.match(/\{[\s\S]*\}/);
+  if (regexMatch) {
+    try {
+      return JSON.parse(regexMatch[0]);
+    } catch {}
+  }
+
+  // All strategies failed — throw with preview of what we received
+  const preview = text.substring(0, 300).replace(/\n/g, '\\n');
+  throw new Error(`No valid JSON found in model response. Preview: "${preview}..."`);
 }
 
 export async function POST(req: NextRequest) {
@@ -124,7 +229,7 @@ Teks Laporan:
 ${reportText.substring(0, 120000)}
 ---`;
 
-    const responseText = await callKieAI(systemPrompt);
+    const responseText = await callAI(systemPrompt);
     const journalJSON = extractJSON(responseText);
 
     return NextResponse.json(journalJSON);
