@@ -81,9 +81,13 @@ async function callGeminiDirect(prompt: string, overrideKey?: string): Promise<s
   return rawText;
 }
 
-// Try client Gemini direct first, then default KIE, then default Gemini direct
+function isValidGeminiKey(key?: string): boolean {
+  return typeof key === "string" && key.trim().startsWith("AIzaSy");
+}
+
+// Try client Gemini direct first, then default KIE, then default Gemini direct (if valid)
 async function callAI(prompt: string, clientGeminiKey?: string): Promise<string> {
-  if (clientGeminiKey) {
+  if (isValidGeminiKey(clientGeminiKey)) {
     try {
       console.log("[callAI] Trying client-provided Gemini API key...");
       return await callGeminiDirect(prompt, clientGeminiKey);
@@ -96,8 +100,12 @@ async function callAI(prompt: string, clientGeminiKey?: string): Promise<string>
     return await callKieAI(prompt);
   } catch (kieError: any) {
     console.warn("[callAI] KIE API failed:", kieError.message);
-    console.log("[callAI] Trying direct Gemini API fallback...");
-    return await callGeminiDirect(prompt, clientGeminiKey || GEMINI_API_KEY);
+    const fallbackKey = clientGeminiKey || GEMINI_API_KEY;
+    if (isValidGeminiKey(fallbackKey)) {
+      console.log("[callAI] Trying direct Gemini API fallback...");
+      return await callGeminiDirect(prompt, fallbackKey);
+    }
+    throw new Error(`KIE API gagal: ${kieError.message}. Fallback ke Gemini API tidak tersedia karena kunci API tidak valid atau tidak dikonfigurasi.`);
   }
 }
 
