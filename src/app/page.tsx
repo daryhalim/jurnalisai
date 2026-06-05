@@ -305,6 +305,7 @@ export default function Home() {
 
       const processRes = await fetch("/api/process", {
         method: "POST",
+        headers: apiKey ? { "x-gemini-key": apiKey } : undefined,
         body: formData
       });
 
@@ -334,7 +335,10 @@ export default function Home() {
           try {
             const checkRes = await fetch("/api/check-ai", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { 
+                "Content-Type": "application/json",
+                ...(apiKey && { "x-gemini-key": apiKey })
+              },
               body: JSON.stringify({ text: journalResult[tab] })
             });
             if (checkRes.ok) {
@@ -370,7 +374,10 @@ export default function Home() {
     try {
       const res = await fetch("/api/check-ai", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(apiKey && { "x-gemini-key": apiKey })
+        },
         body: JSON.stringify({ text: textToCheck })
       });
 
@@ -393,7 +400,10 @@ export default function Home() {
     try {
       const res = await fetch("/api/paraphrase", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(apiKey && { "x-gemini-key": apiKey })
+        },
         body: JSON.stringify({ text: sentence })
       });
       if (res.ok) {
@@ -459,7 +469,10 @@ export default function Home() {
     try {
       const res = await fetch("/api/paraphrase", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(apiKey && { "x-gemini-key": apiKey })
+        },
         body: JSON.stringify({ text: textToParaphrase })
       });
 

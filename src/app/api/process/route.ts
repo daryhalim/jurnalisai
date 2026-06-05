@@ -40,15 +40,16 @@ async function callKieAI(prompt: string): Promise<string> {
   return rawText;
 }
 
-async function callGeminiDirect(prompt: string): Promise<string> {
-  if (!GEMINI_API_KEY) {
+async function callGeminiDirect(prompt: string, overrideKey?: string): Promise<string> {
+  const key = overrideKey || GEMINI_API_KEY;
+  if (!key) {
     throw new Error("GEMINI_API_KEY not configured");
   }
 
-  console.log("[Gemini Direct] Falling back to direct Gemini API...");
+  console.log("[Gemini Direct] Calling Gemini API...");
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -80,14 +81,23 @@ async function callGeminiDirect(prompt: string): Promise<string> {
   return rawText;
 }
 
-// Try KIE first, fallback to Gemini Direct
-async function callAI(prompt: string): Promise<string> {
+// Try client Gemini direct first, then default KIE, then default Gemini direct
+async function callAI(prompt: string, clientGeminiKey?: string): Promise<string> {
+  if (clientGeminiKey) {
+    try {
+      console.log("[callAI] Trying client-provided Gemini API key...");
+      return await callGeminiDirect(prompt, clientGeminiKey);
+    } catch (geminiError: any) {
+      console.warn("[callAI] Client Gemini API key call failed:", geminiError.message);
+    }
+  }
+
   try {
     return await callKieAI(prompt);
   } catch (kieError: any) {
     console.warn("[callAI] KIE API failed:", kieError.message);
     console.log("[callAI] Trying direct Gemini API fallback...");
-    return await callGeminiDirect(prompt);
+    return await callGeminiDirect(prompt, clientGeminiKey || GEMINI_API_KEY);
   }
 }
 
@@ -153,6 +163,7 @@ function extractJSON(text: string): any {
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
+    const clientGeminiKey = req.headers.get("x-gemini-key") || (formData.get("apiKey") as string | null) || "";
     const reportFile = formData.get("report") as File | null;
     const translate = formData.get("translate") === "true";
 
@@ -229,7 +240,7 @@ Teks Laporan:
 ${reportText.substring(0, 120000)}
 ---`;
 
-    const responseText = await callAI(systemPrompt);
+    const responseText = await callAI(systemPrompt, clientGeminiKey);
     const journalJSON = extractJSON(responseText);
 
     return NextResponse.json(journalJSON);

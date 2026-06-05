@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const KIE_API_KEY = process.env.KIE_API_KEY || "a78ff25836b2d31011ce5b8dc6ce1887";
 const KIE_API_URL = "https://api.kie.ai/gemini-2.5-flash/v1/chat/completions";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
 async function callKieAI(prompt: string): Promise<string> {
   const response = await fetch(KIE_API_URL, {
@@ -36,9 +37,71 @@ async function callKieAI(prompt: string): Promise<string> {
   return rawText;
 }
 
+async function callGeminiDirect(prompt: string, overrideKey?: string): Promise<string> {
+  const key = overrideKey || GEMINI_API_KEY;
+  if (!key) {
+    throw new Error("GEMINI_API_KEY not configured");
+  }
+
+  console.log("[paraphrase Direct] Calling Gemini API...");
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 8000,
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    console.error(`[paraphrase Direct] Error ${response.status}:`, errBody.substring(0, 500));
+    throw new Error(`Gemini API error ${response.status}: ${errBody.substring(0, 200)}`);
+  }
+
+  const data = await response.json();
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  console.log("[paraphrase Direct] response length:", rawText.length);
+  console.log("[paraphrase Direct] response preview:", rawText.substring(0, 300));
+
+  if (!rawText.trim()) {
+    throw new Error("Gemini API returned empty content");
+  }
+
+  return rawText;
+}
+
+async function callAI(prompt: string, clientGeminiKey?: string): Promise<string> {
+  if (clientGeminiKey) {
+    try {
+      console.log("[paraphrase callAI] Trying client-provided Gemini API key...");
+      return await callGeminiDirect(prompt, clientGeminiKey);
+    } catch (geminiError: any) {
+      console.warn("[paraphrase callAI] Client Gemini key call failed:", geminiError.message);
+    }
+  }
+
+  try {
+    return await callKieAI(prompt);
+  } catch (kieError: any) {
+    console.warn("[paraphrase callAI] KIE API failed:", kieError.message);
+    console.log("[paraphrase callAI] Trying direct Gemini API fallback...");
+    return await callGeminiDirect(prompt, clientGeminiKey || GEMINI_API_KEY);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { text } = await req.json();
+    const body = await req.json();
+    const { text } = body;
+    const clientGeminiKey = req.headers.get("x-gemini-key") || body.apiKey || "";
 
     if (!text || !text.trim()) {
       return NextResponse.json({ error: "Teks untuk diparafase wajib diisi." }, { status: 400 });
@@ -63,7 +126,7 @@ ${text}
 
 Tulis LANGSUNG hasil parafrasenya saja dari awal sampai akhir. Jangan tambahkan pengantar atau penutup.`;
 
-    const paraphrasedText = await callKieAI(systemPrompt);
+    const paraphrasedText = await callAI(systemPrompt, clientGeminiKey);
     return NextResponse.json({ paraphrasedText: paraphrasedText.trim() });
   } catch (error: any) {
     console.error("Error in paraphrase API:", error);

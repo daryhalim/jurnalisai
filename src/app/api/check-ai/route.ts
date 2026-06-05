@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const KIE_API_KEY = process.env.KIE_API_KEY || "a78ff25836b2d31011ce5b8dc6ce1887";
 const KIE_API_URL = "https://api.kie.ai/gemini-2.5-flash/v1/chat/completions";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
 async function callKieAI(prompt: string): Promise<string> {
   const response = await fetch(KIE_API_URL, {
@@ -36,6 +37,66 @@ async function callKieAI(prompt: string): Promise<string> {
   }
 }
 
+async function callGeminiDirect(prompt: string, overrideKey?: string): Promise<string> {
+  const key = overrideKey || GEMINI_API_KEY;
+  if (!key) {
+    throw new Error("GEMINI_API_KEY not configured");
+  }
+
+  console.log("[check-ai Direct] Calling Gemini API...");
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 8000,
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    console.error(`[check-ai Direct] Error ${response.status}:`, errBody.substring(0, 500));
+    throw new Error(`Gemini API error ${response.status}: ${errBody.substring(0, 200)}`);
+  }
+
+  const data = await response.json();
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  console.log("[check-ai Direct] response length:", rawText.length);
+  console.log("[check-ai Direct] response preview:", rawText.substring(0, 300));
+
+  if (!rawText.trim()) {
+    throw new Error("Gemini API returned empty content");
+  }
+
+  return rawText;
+}
+
+async function callAI(prompt: string, clientGeminiKey?: string): Promise<string> {
+  if (clientGeminiKey) {
+    try {
+      console.log("[check-ai callAI] Trying client-provided Gemini API key...");
+      return await callGeminiDirect(prompt, clientGeminiKey);
+    } catch (geminiError: any) {
+      console.warn("[check-ai callAI] Client Gemini key call failed:", geminiError.message);
+    }
+  }
+
+  try {
+    return await callKieAI(prompt);
+  } catch (kieError: any) {
+    console.warn("[check-ai callAI] KIE API failed:", kieError.message);
+    console.log("[check-ai callAI] Trying direct Gemini API fallback...");
+    return await callGeminiDirect(prompt, clientGeminiKey || GEMINI_API_KEY);
+  }
+}
+
 function extractJSON(text: string): any {
   const stripped = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
   try { return JSON.parse(stripped); } catch {}
@@ -46,7 +107,9 @@ function extractJSON(text: string): any {
 
 export async function POST(req: NextRequest) {
   try {
-    const { text } = await req.json();
+    const body = await req.json();
+    const { text } = body;
+    const clientGeminiKey = req.headers.get("x-gemini-key") || body.apiKey || "";
 
     if (!text || !text.trim()) {
       return NextResponse.json({ error: "Teks untuk dianalisis wajib diisi." }, { status: 400 });
@@ -72,7 +135,7 @@ Teks:
 ${text}
 ---`;
 
-    const responseText = await callKieAI(systemPrompt);
+    const responseText = await callAI(systemPrompt, clientGeminiKey);
     const resultJSON = extractJSON(responseText);
     return NextResponse.json(resultJSON);
   } catch (error: any) {
