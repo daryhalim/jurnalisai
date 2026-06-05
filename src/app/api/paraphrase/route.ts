@@ -4,11 +4,16 @@ const KIE_API_KEY = process.env.KIE_API_KEY || "a78ff25836b2d31011ce5b8dc6ce1887
 const KIE_API_URL = "https://api.kie.ai/gemini-2.5-flash/v1/chat/completions";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
-async function callKieAI(prompt: string): Promise<string> {
+async function callKieAI(prompt: string, clientKieKey?: string): Promise<string> {
+  const apiKey = clientKieKey || KIE_API_KEY;
+  if (!apiKey) {
+    throw new Error("KIE_API_KEY not configured");
+  }
+
   const response = await fetch(KIE_API_URL, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${KIE_API_KEY}`,
+      "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -82,8 +87,15 @@ function isValidGeminiKey(key?: string): boolean {
   return typeof key === "string" && key.trim().startsWith("AIzaSy");
 }
 
-async function callAI(prompt: string, clientGeminiKey?: string): Promise<string> {
-  if (isValidGeminiKey(clientGeminiKey)) {
+function isValidKieKey(key?: string): boolean {
+  return typeof key === "string" && key.trim().length === 32 && /^[a-fA-F0-9]+$/.test(key.trim());
+}
+
+async function callAI(prompt: string, clientKey?: string): Promise<string> {
+  const clientGeminiKey = isValidGeminiKey(clientKey) ? clientKey : undefined;
+  const clientKieKey = isValidKieKey(clientKey) ? clientKey : undefined;
+
+  if (clientGeminiKey) {
     try {
       console.log("[paraphrase callAI] Trying client-provided Gemini API key...");
       return await callGeminiDirect(prompt, clientGeminiKey);
@@ -93,7 +105,7 @@ async function callAI(prompt: string, clientGeminiKey?: string): Promise<string>
   }
 
   try {
-    return await callKieAI(prompt);
+    return await callKieAI(prompt, clientKieKey);
   } catch (kieError: any) {
     console.warn("[paraphrase callAI] KIE API failed:", kieError.message);
     const fallbackKey = clientGeminiKey || GEMINI_API_KEY;
