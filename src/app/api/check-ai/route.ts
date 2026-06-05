@@ -28,7 +28,18 @@ async function callKieAI(prompt: string, clientKieKey?: string): Promise<string>
   }
 
   const data = await response.json();
-  const rawText = data.choices?.[0]?.message?.content || "";
+
+  if (data.code && data.code !== 200) {
+    throw new Error(`KIE API error ${data.code}: ${data.msg || "Unknown error"}`);
+  }
+  if (!data.choices || data.choices.length === 0) {
+    if (data.msg || data.error) {
+      throw new Error(`KIE API error: ${data.msg || data.error}`);
+    }
+    throw new Error("KIE API returned no choices");
+  }
+
+  const rawText = data.choices[0]?.message?.content || "";
   console.log("[KIE /check-ai] raw response preview:", rawText.substring(0, 300));
 
   try {

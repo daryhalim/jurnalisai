@@ -78,6 +78,21 @@ export default function Home() {
   // App API & Status State
   const [apiKey, setApiKey] = useState<string>("");
   const [showApiPanel, setShowApiPanel] = useState<boolean>(false);
+
+  const isValidGeminiKey = (key?: string): boolean => {
+    return typeof key === "string" && key.trim().startsWith("AIzaSy");
+  };
+
+  const isValidKieKey = (key?: string): boolean => {
+    return typeof key === "string" && key.trim().length === 32 && /^[a-fA-F0-9]+$/.test(key.trim());
+  };
+
+  const getKeyTypeLabel = (): string => {
+    if (!apiKey) return "Setup API Key";
+    if (isValidGeminiKey(apiKey)) return "Gemini API Terhubung";
+    if (isValidKieKey(apiKey)) return "KIE API Terhubung";
+    return "API Key Terhubung";
+  };
   const [status, setStatus] = useState<"idle" | "uploading" | "processing" | "checking" | "done" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [currentStep, setCurrentStep] = useState<number>(0);
@@ -635,7 +650,7 @@ export default function Home() {
               boxShadow: apiKey ? "0 0 8px var(--success)" : "0 0 8px var(--warning)"
             }} 
           />
-          <span>{apiKey ? "Gemini API Terhubung" : "Setup Gemini API Key"}</span>
+          <span>{getKeyTypeLabel()}</span>
         </div>
       </header>
 
@@ -643,17 +658,17 @@ export default function Home() {
       {showApiPanel && (
         <div className={styles.apiInputPanel}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>Gemini API Key Konfigurasi</span>
+            <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>Konfigurasi API Key (Gemini / KIE)</span>
             <X size={16} style={{ cursor: "pointer", color: "var(--text-muted)" }} onClick={() => setShowApiPanel(false)} />
           </div>
           <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: "0.25rem" }}>
-            Meskipun API key server sudah disiapkan, Anda bisa menggunakan kunci personal Anda di browser.
+            Mendukung Google Gemini API Key (diawali <code>AIzaSy...</code>) atau KIE API Key (32 karakter hex). Kunci disimpan secara lokal di browser Anda.
           </p>
           <div className={styles.apiInputGroup}>
             <input 
               type="password" 
               className={styles.apiInput} 
-              placeholder={apiKey ? "••••••••••••••••••••••••" : "Masukkan API Key Anda (AIzaSy...)"}
+              placeholder={apiKey ? "••••••••••••••••••••••••" : "Masukkan API Key Anda (AIzaSy... atau KIE Key)"}
               id="apiKeyField"
             />
             <button 
