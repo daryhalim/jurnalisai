@@ -297,7 +297,40 @@ export default function Home() {
     }
   };
 
-  // Main Generator Logic
+  // Helper: robust fetch that reads text first, then parses JSON
+  const safeFetchJSON = async (url: string, options: RequestInit): Promise<any> => {
+    const res = await fetch(url, options);
+    const rawText = await res.text();
+
+    if (!res.ok) {
+      // Try to extract error message from JSON response
+      try {
+        const errorData = JSON.parse(rawText);
+        throw new Error(errorData.error || `Server error ${res.status}`);
+      } catch (parseErr: any) {
+        // If the response is HTML (timeout/gateway error), provide helpful message
+        if (rawText.includes("Gateway Timeout") || rawText.includes("Bad Gateway") || res.status === 502 || res.status === 504) {
+          throw new Error("Batas waktu server habis (Gateway Timeout). Silakan coba lagi dalam beberapa saat.");
+        }
+        if (parseErr.message && !parseErr.message.includes("JSON")) {
+          throw parseErr; // Re-throw if it's our custom error
+        }
+        throw new Error(`Server error ${res.status}: Respon tidak valid.`);
+      }
+    }
+
+    if (!rawText.trim()) {
+      throw new Error("Server mengembalikan respon kosong.");
+    }
+
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      throw new Error("Respon server bukan format JSON yang valid.");
+    }
+  };
+
+  // Main Generator Logic — Section-by-Section Pipeline
   const startGenerating = async () => {
     if (!reportFile) return;
 
@@ -306,62 +339,108 @@ export default function Home() {
     setErrorMsg("");
 
     try {
-      // Step 1: Reading template
+      // ===== STEP 1: Ekstraksi Teks dari Dokumen =====
       setCurrentStep(1);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // Step 2: Processing report (sending to backend)
-      setCurrentStep(2);
-      
-      const formData = new FormData();
-      formData.append("report", reportFile);
-      formData.append("translate", String(translate));
-      formData.append("citationStyle", citationStyle);
+      const extractFormData = new FormData();
+      extractFormData.append("report", reportFile);
 
-      const processRes = await fetch("/api/process", {
+      const extractResult = await safeFetchJSON("/api/extract", {
         method: "POST",
-        headers: apiKey ? { "x-gemini-key": apiKey } : undefined,
-        body: formData
+        body: extractFormData
       });
 
-      if (!processRes.ok) {
-        const errorData = await processRes.json();
-        throw new Error(errorData.error || "Gagal memproses naskah laporan.");
+      const reportText: string = extractResult.reportText;
+      if (!reportText || !reportText.trim()) {
+        throw new Error("File laporan kosong atau tidak terbaca.");
       }
 
-      const journalResult: JournalData = await processRes.json();
-      setJournalData(journalResult);
+      const sectionPayload = (section: string, previousSections?: Record<string, string>) => ({
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(apiKey && { "x-gemini-key": apiKey })
+        },
+        body: JSON.stringify({
+          reportText,
+          section,
+          citationStyle,
+          translate,
+          previousSections
+        })
+      });
 
-      // Step 3: Generating sections & Writing drafts
+      const result: JournalData = { ...initialJournalData };
+
+      // ===== STEP 2: Judul & Abstrak =====
+      setCurrentStep(2);
+      const judulAbstrak = await safeFetchJSON("/api/generate-section", sectionPayload("judul_abstrak"));
+      result.judul = judulAbstrak.judul || "";
+      result.abstrak = judulAbstrak.abstrak || "";
+      setJournalData({ ...result });
+
+      // ===== STEP 3: Pendahuluan =====
       setCurrentStep(3);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const pendahuluan = await safeFetchJSON("/api/generate-section", sectionPayload("pendahuluan"));
+      result.pendahuluan = pendahuluan.pendahuluan || "";
+      setJournalData({ ...result });
 
-      // Step 4: Turnitin AI detection check
+      // ===== STEP 4: Metode =====
       setCurrentStep(4);
-      
-      // Perform initial AI check on Abstrak and Pendahuluan to populate scores
+      const metode = await safeFetchJSON("/api/generate-section", sectionPayload("metode"));
+      result.metode = metode.metode || "";
+      setJournalData({ ...result });
+
+      // ===== STEP 5: Hasil & Pembahasan =====
+      setCurrentStep(5);
+      const hasil = await safeFetchJSON("/api/generate-section", sectionPayload("hasil"));
+      result.hasil = hasil.hasil || "";
+      setJournalData({ ...result });
+
+      // ===== STEP 6: Kesimpulan =====
+      setCurrentStep(6);
+      const kesimpulan = await safeFetchJSON("/api/generate-section", sectionPayload("kesimpulan", {
+        judul: result.judul,
+        abstrak: result.abstrak,
+        pendahuluan: result.pendahuluan,
+        hasil: result.hasil
+      }));
+      result.kesimpulan = kesimpulan.kesimpulan || "";
+      setJournalData({ ...result });
+
+      // ===== STEP 7: Sinkronisasi Kutipan & Daftar Pustaka =====
+      setCurrentStep(7);
+      const referensi = await safeFetchJSON("/api/generate-section", sectionPayload("referensi", {
+        pendahuluan: result.pendahuluan,
+        metode: result.metode,
+        hasil: result.hasil,
+        kesimpulan: result.kesimpulan
+      }));
+      result.referensi = referensi.referensi || "";
+      setJournalData({ ...result });
+
+      // ===== STEP 8: Turnitin AI Check (opsional, non-blocking) =====
+      setCurrentStep(8);
+
       const tabsToCheck: TabType[] = ["abstrak", "pendahuluan"];
       const updatedScores = { ...aiScores };
       const updatedHighlights = { ...aiHighlights };
       const updatedExplanations = { ...aiExplanations };
 
       for (const tab of tabsToCheck) {
-        if (journalResult[tab] && journalResult[tab].trim()) {
+        if (result[tab] && result[tab].trim()) {
           try {
-            const checkRes = await fetch("/api/check-ai", {
+            const resData: AICheckResponse = await safeFetchJSON("/api/check-ai", {
               method: "POST",
-              headers: { 
+              headers: {
                 "Content-Type": "application/json",
                 ...(apiKey && { "x-gemini-key": apiKey })
               },
-              body: JSON.stringify({ text: journalResult[tab] })
+              body: JSON.stringify({ text: result[tab] })
             });
-            if (checkRes.ok) {
-              const resData: AICheckResponse = await checkRes.json();
-              updatedScores[tab] = resData.score;
-              updatedHighlights[tab] = resData.highlights || [];
-              updatedExplanations[tab] = resData.explanation || "";
-            }
+            updatedScores[tab] = resData.score;
+            updatedHighlights[tab] = resData.highlights || [];
+            updatedExplanations[tab] = resData.explanation || "";
           } catch (e) {
             console.error(`AI checking failed for tab: ${tab}`, e);
           }
@@ -769,25 +848,41 @@ export default function Home() {
               Sedang Menyusun Jurnal Anda
             </h3>
             <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-              AI Gemini sedang mengekstrak bab laporan dan merangkum naskah...
+              AI sedang menulis jurnal Anda bagian per bagian...
             </p>
 
             <div className={styles.stepList}>
               <div className={`${styles.stepItem} ${currentStep > 1 ? styles.stepItemCompleted : currentStep === 1 ? styles.stepItemActive : ""}`}>
                 <div className={styles.stepDot}></div>
-                <span>Membaca isi laporan penelitian...</span>
+                <span>Membaca & mengekstrak isi laporan penelitian...</span>
               </div>
               <div className={`${styles.stepItem} ${currentStep > 2 ? styles.stepItemCompleted : currentStep === 2 ? styles.stepItemActive : ""}`}>
                 <div className={styles.stepDot}></div>
-                <span>Mengekstrak teks laporan penelitian via mammoth...</span>
+                <span>Menyusun Judul & Abstrak...</span>
               </div>
               <div className={`${styles.stepItem} ${currentStep > 3 ? styles.stepItemCompleted : currentStep === 3 ? styles.stepItemActive : ""}`}>
                 <div className={styles.stepDot}></div>
-                <span>Menyusun draf bagian jurnal dengan Gemini API...</span>
+                <span>Menulis bagian Pendahuluan (dengan kutipan)...</span>
               </div>
               <div className={`${styles.stepItem} ${currentStep > 4 ? styles.stepItemCompleted : currentStep === 4 ? styles.stepItemActive : ""}`}>
                 <div className={styles.stepDot}></div>
-                <span>Melakukan estimasi Turnitin AI Detector awal...</span>
+                <span>Menulis bagian Metode...</span>
+              </div>
+              <div className={`${styles.stepItem} ${currentStep > 5 ? styles.stepItemCompleted : currentStep === 5 ? styles.stepItemActive : ""}`}>
+                <div className={styles.stepDot}></div>
+                <span>Menulis Hasil & Pembahasan (bagian terpanjang)...</span>
+              </div>
+              <div className={`${styles.stepItem} ${currentStep > 6 ? styles.stepItemCompleted : currentStep === 6 ? styles.stepItemActive : ""}`}>
+                <div className={styles.stepDot}></div>
+                <span>Menulis Kesimpulan...</span>
+              </div>
+              <div className={`${styles.stepItem} ${currentStep > 7 ? styles.stepItemCompleted : currentStep === 7 ? styles.stepItemActive : ""}`}>
+                <div className={styles.stepDot}></div>
+                <span>Menyinkronkan Kutipan & Daftar Pustaka...</span>
+              </div>
+              <div className={`${styles.stepItem} ${currentStep > 8 ? styles.stepItemCompleted : currentStep === 8 ? styles.stepItemActive : ""}`}>
+                <div className={styles.stepDot}></div>
+                <span>Estimasi Turnitin AI Detector awal...</span>
               </div>
             </div>
           </div>
