@@ -147,6 +147,13 @@
     display: grid;
     grid-template-columns: 1fr;
     gap: 2rem;
+    width: 100%;
+    max-width: 100%;
+}
+
+.workspaceProcessed > div {
+    min-width: 0;
+    max-width: 100%;
 }
 
 @media (min-width: 1024px) {

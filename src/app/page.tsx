@@ -964,7 +964,9 @@ export default function Home() {
                       color: "white",
                       fontSize: "0.85rem",
                       outline: "none",
-                      cursor: "pointer"
+                      cursor: "pointer",
+                      maxWidth: "100%",
+                      textOverflow: "ellipsis"
                     }}
                   >
                     <option value="apa7" style={{ background: "#06202B", color: "white" }}>APA 7th Edition (Nama, Tahun)</option>
