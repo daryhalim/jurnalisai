@@ -832,8 +832,6 @@
     .container {
         padding: 0.75rem;
         width: 100%;
-        max-width: 100vw;
-        overflow-x: hidden;
     }
     .header {
         flex-direction: column;
@@ -857,7 +855,6 @@
     }
     .editorPane {
         max-width: 100%;
-        overflow-x: hidden;
     }
     .paneBody {
         padding: 1rem;

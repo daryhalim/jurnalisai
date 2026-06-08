@@ -29,16 +29,15 @@
 }
 
 html, body {
-    max-width: 100vw;
     min-height: 100vh;
     background-color: var(--bg-base);
     color: var(--text-primary);
     font-family: var(--font-main);
-    overflow-x: hidden;
     background-image: 
         radial-gradient(circle at 10% 20%, rgba(7, 122, 125, 0.15) 0%, transparent 45%),
         radial-gradient(circle at 90% 80%, rgba(122, 226, 207, 0.1) 0%, transparent 45%);
     background-attachment: fixed;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
