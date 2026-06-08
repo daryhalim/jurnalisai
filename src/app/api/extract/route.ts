@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import mammoth from "mammoth";
-import pdfParse from "pdf-parse";
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,15 +18,14 @@ export async function POST(req: NextRequest) {
       const isPdf = reportFile.name.toLowerCase().endsWith(".pdf") || reportFile.type === "application/pdf";
       
       if (isPdf) {
-        const pdfData = await pdfParse(buffer);
-        reportText = pdfData.text;
-      } else {
-        const result = await mammoth.extractRawText({ buffer });
-        reportText = result.value;
+        return NextResponse.json({ error: "Format PDF tidak didukung oleh server saat ini. Harap konversi ke format Word (.docx) terlebih dahulu." }, { status: 400 });
       }
+
+      const result = await mammoth.extractRawText({ buffer });
+      reportText = result.value;
     } catch (err: any) {
       console.error("extraction error:", err);
-      return NextResponse.json({ error: "Gagal mengekstrak teks dari file laporan (pastikan file .docx atau .pdf valid)." }, { status: 500 });
+      return NextResponse.json({ error: "Gagal mengekstrak teks dari file laporan (pastikan file .docx valid)." }, { status: 500 });
     }
 
     if (!reportText.trim()) {

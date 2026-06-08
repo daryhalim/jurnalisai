@@ -762,7 +762,7 @@ export default function Home() {
                 <input 
                   type="file" 
                   ref={reportInputRef} 
-                  accept=".docx,.pdf" 
+                  accept=".docx" 
                   style={{ display: "none" }} 
                   onChange={(e) => {
                     if (e.target.files && e.target.files.length > 0) {
@@ -775,7 +775,7 @@ export default function Home() {
                   <FileText size={28} />
                 </div>
                 <div className={styles.uploadTitle}>Laporan Penelitian / PKM</div>
-                <div className={styles.uploadDesc}>Tarik file Word (.docx) atau PDF ke sini, atau klik untuk memilih file.</div>
+                <div className={styles.uploadDesc}>Tarik file Word (.docx) ke sini, atau klik untuk memilih file.</div>
                 
                 {reportFile && (
                   <div className={styles.fileIndicator} onClick={(e) => e.stopPropagation()}>
@@ -807,7 +807,7 @@ export default function Home() {
                 <Wand2 size={20} />
                 Mulai Proses Konversi Jurnal
               </button>
-              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Format didukung: Word (.docx) & PDF</span>
+              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Format didukung: Word (.docx)</span>
             </div>
           </div>
         </div>
