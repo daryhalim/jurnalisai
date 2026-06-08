@@ -286,14 +286,23 @@ export default function Home() {
     setDragOverReport(false);
   };
 
+  const handleFileSelection = (file: File) => {
+    if (file.size > 4.5 * 1024 * 1024) {
+      alert("Ukuran file terlalu besar! Maksimal 4.5 MB. Harap kompres file PDF atau Word Anda terlebih dahulu agar tidak membebani server.");
+      return;
+    }
+    if (file.name.toLowerCase().endsWith(".docx") || file.name.toLowerCase().endsWith(".pdf")) {
+      setReportFile(file);
+    } else {
+      alert("Hanya format .docx dan .pdf yang didukung!");
+    }
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     handleDragLeave();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      if (file.name.endsWith(".docx") || file.name.endsWith(".pdf")) {
-        setReportFile(file);
-      }
+      handleFileSelection(e.dataTransfer.files[0]);
     }
   };
 
@@ -312,10 +321,13 @@ export default function Home() {
         if (rawText.includes("Gateway Timeout") || rawText.includes("Bad Gateway") || res.status === 502 || res.status === 504) {
           throw new Error("Batas waktu server habis (Gateway Timeout). Silakan coba lagi dalam beberapa saat.");
         }
+        if (res.status === 413 || res.status === 400 || rawText.toLowerCase().includes("large")) {
+           throw new Error("File laporan terlalu besar untuk diunggah (batas server 4.5 MB). Harap perkecil/kompres file Anda.");
+        }
         if (parseErr.message && !parseErr.message.includes("JSON")) {
           throw parseErr; // Re-throw if it's our custom error
         }
-        throw new Error(`Server error ${res.status}: Respon tidak valid.`);
+        throw new Error(`Server error ${res.status}: File tidak valid atau terlalu besar.`);
       }
     }
 
@@ -752,7 +764,12 @@ export default function Home() {
                   ref={reportInputRef} 
                   accept=".docx,.pdf" 
                   style={{ display: "none" }} 
-                  onChange={(e) => e.target.files && setReportFile(e.target.files[0])}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleFileSelection(e.target.files[0]);
+                      e.target.value = ''; // Reset to allow re-selection of same file
+                    }
+                  }}
                 />
                 <div className={styles.uploadIconWrapper}>
                   <FileText size={28} />
