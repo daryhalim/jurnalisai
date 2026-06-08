@@ -287,14 +287,10 @@ export default function Home() {
   };
 
   const handleFileSelection = (file: File) => {
-    if (file.size > 4.5 * 1024 * 1024) {
-      alert("Ukuran file terlalu besar! Maksimal 4.5 MB. Harap kompres file PDF atau Word Anda terlebih dahulu agar tidak membebani server.");
-      return;
-    }
-    if (file.name.toLowerCase().endsWith(".docx") || file.name.toLowerCase().endsWith(".pdf")) {
+    if (file.name.toLowerCase().endsWith(".docx")) {
       setReportFile(file);
     } else {
-      alert("Hanya format .docx dan .pdf yang didukung!");
+      alert("Hanya format Word (.docx) yang didukung!");
     }
   };
 
@@ -321,8 +317,8 @@ export default function Home() {
         if (rawText.includes("Gateway Timeout") || rawText.includes("Bad Gateway") || res.status === 502 || res.status === 504) {
           throw new Error("Batas waktu server habis (Gateway Timeout). Silakan coba lagi dalam beberapa saat.");
         }
-        if (res.status === 413 || res.status === 400 || rawText.toLowerCase().includes("large")) {
-           throw new Error("File laporan terlalu besar untuk diunggah (batas server 4.5 MB). Harap perkecil/kompres file Anda.");
+        if (res.status === 413 || rawText.toLowerCase().includes("large")) {
+           throw new Error("File laporan Anda melampaui batas maksimal server (Payload Too Large). Harap hilangkan gambar berukuran besar dari Word Anda.");
         }
         if (parseErr.message && !parseErr.message.includes("JSON")) {
           throw parseErr; // Re-throw if it's our custom error
