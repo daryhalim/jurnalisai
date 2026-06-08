@@ -718,50 +718,7 @@ export default function Home() {
           </div>
           <h1 className={styles.logoTitle}>Jurnalis.AI</h1>
         </div>
-        <div 
-          className={`${styles.apiBadge} ${!apiKey ? styles.apiBadgeSetup : ""}`}
-          onClick={() => setShowApiPanel(!showApiPanel)}
-        >
-          <div 
-            className="pulse-green" 
-            style={{ 
-              background: apiKey ? "var(--success)" : "var(--warning)",
-              boxShadow: apiKey ? "0 0 8px var(--success)" : "0 0 8px var(--warning)"
-            }} 
-          />
-          <span>{getKeyTypeLabel()}</span>
-        </div>
       </header>
-
-      {/* API Key Panel */}
-      {showApiPanel && (
-        <div className={styles.apiInputPanel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>Konfigurasi API Key (Gemini / KIE)</span>
-            <X size={16} style={{ cursor: "pointer", color: "var(--text-muted)" }} onClick={() => setShowApiPanel(false)} />
-          </div>
-          <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: "0.25rem" }}>
-            Mendukung Google Gemini API Key (diawali <code>AIzaSy...</code>) atau KIE API Key (32 karakter hex). Kunci disimpan secara lokal di browser Anda.
-          </p>
-          <div className={styles.apiInputGroup}>
-            <input 
-              type="password" 
-              className={styles.apiInput} 
-              placeholder={apiKey ? "••••••••••••••••••••••••" : "Masukkan API Key Anda (AIzaSy... atau KIE Key)"}
-              id="apiKeyField"
-            />
-            <button 
-              className={styles.apiSaveBtn}
-              onClick={() => {
-                const val = (document.getElementById("apiKeyField") as HTMLInputElement).value;
-                saveApiKey(val);
-              }}
-            >
-              Simpan
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Tutorial Banner */}
       <div className={styles.tutorialBanner}>
