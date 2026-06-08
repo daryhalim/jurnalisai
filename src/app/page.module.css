@@ -796,6 +796,7 @@
     border-radius: 24px;
     padding: 2.5rem;
     width: 420px;
+    max-width: 90%;
     text-align: center;
     box-shadow: 0 20px 50px rgba(0,0,0,0.5);
     animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -818,4 +819,29 @@
     color: var(--danger);
     font-size: 0.85rem;
     margin-top: 0.5rem;
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 1rem;
+    }
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    .uploadCard {
+        padding: 2rem 1rem;
+    }
+    .successCard, .processingContent {
+        padding: 1.5rem;
+        width: 92%;
+    }
+    .tutorialBanner {
+        flex-direction: column;
+    }
+    .actionPanel {
+        flex-direction: column;
+        text-align: center;
+    }
 }
