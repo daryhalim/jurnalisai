@@ -349,18 +349,27 @@ export default function Home() {
     try {
       // ===== STEP 1: Ekstraksi Teks dari Dokumen =====
       setCurrentStep(1);
-
-      const extractFormData = new FormData();
-      extractFormData.append("report", reportFile);
-
-      const extractResult = await safeFetchJSON("/api/extract", {
-        method: "POST",
-        body: extractFormData
-      });
-
-      const reportText: string = extractResult.reportText;
-      if (!reportText || !reportText.trim()) {
-        throw new Error("File laporan kosong atau tidak terbaca.");
+      let reportText: string = "";
+      try {
+        if (!(window as any).mammoth) {
+          throw new Error("Sistem pembaca dokumen belum siap. Harap muat ulang halaman.");
+        }
+        
+        const arrayBuffer = await reportFile.arrayBuffer();
+        const result = await (window as any).mammoth.extractRawText({ arrayBuffer });
+        
+        let extractedText = result.value;
+        if (!extractedText || !extractedText.trim()) {
+          throw new Error("File laporan kosong atau tidak terbaca.");
+        }
+        
+        // Truncate to 60k chars max to save bandwidth and fit API limits
+        reportText = extractedText.substring(0, 60000);
+        
+      } catch (err: any) {
+        setErrorMsg(err.message || "Gagal mengekstrak file. Pastikan format .docx valid.");
+        setStatus("idle");
+        return;
       }
 
       const sectionPayload = (section: string, previousSections?: Record<string, string>) => ({

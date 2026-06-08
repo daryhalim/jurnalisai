@@ -23,6 +23,10 @@ export default function RootLayout({
       <body>
         {children}
         <Script
+          src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"
+          strategy="beforeInteractive"
+        />
+        <Script
           src={snapUrl}
           data-client-key={midtransClientKey}
           strategy="lazyOnload"
